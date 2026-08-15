@@ -10,7 +10,7 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:preload && npm run build:renderer",
     "typecheck": "tsc --noEmit",
-    "test:services": "tsx scripts/test-services.ts"
+    "test": "jest"
   },
   "dependencies": {
     "dompurify": "^3.1.6",
@@ -21,12 +21,15 @@
   },
   "devDependencies": {
     "@types/dompurify": "^3.0.5",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.14.9",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^31.1.0",
     "esbuild": "^0.21.5",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
     "tsx": "^4.16.2",
     "typescript": "^5.4.5",
     "vite": "^5.3.1"
