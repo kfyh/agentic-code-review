@@ -1,3 +1,5 @@
+export * from './ipcChannels';
+
 export interface HistoryEntry {
   gitUrl: string;
   lastBranch: string;

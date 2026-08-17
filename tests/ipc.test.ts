@@ -3,6 +3,7 @@ import { agentInvoker } from '../src/main/services/agentInvoker';
 import { gitService } from '../src/main/services/gitService';
 import { installService } from '../src/main/services/installService';
 import { stagingService } from '../src/main/services/stagingService';
+import { IPC_CHANNELS } from '../src/shared/ipcChannels';
 import { ipcMain } from 'electron';
 
 describe('IPC Handlers', () => {
@@ -28,20 +29,23 @@ describe('IPC Handlers', () => {
   });
 
   test('registers all required IPC channels', () => {
-    expect(handlers['get-staging-dir']).toBeDefined();
-    expect(handlers['set-staging-dir']).toBeDefined();
-    expect(handlers['detect-branch']).toBeDefined();
-    expect(handlers['get-history']).toBeDefined();
-    expect(handlers['get-reports']).toBeDefined();
-    expect(handlers['abort-review']).toBeDefined();
-    expect(handlers['start-review']).toBeDefined();
+    expect(handlers[IPC_CHANNELS.GET_STAGING_DIR]).toBeDefined();
+    expect(handlers[IPC_CHANNELS.SET_STAGING_DIR]).toBeDefined();
+    expect(handlers[IPC_CHANNELS.DETECT_BRANCH]).toBeDefined();
+    expect(handlers[IPC_CHANNELS.GET_HISTORY]).toBeDefined();
+    expect(handlers[IPC_CHANNELS.GET_REPORTS]).toBeDefined();
+    expect(handlers[IPC_CHANNELS.ABORT_REVIEW]).toBeDefined();
+    expect(handlers[IPC_CHANNELS.START_REVIEW]).toBeDefined();
   });
 
   test('handles get-staging-dir and set-staging-dir IPC calls', async () => {
-    const dir = await handlers['get-staging-dir']();
+    const dir = await handlers[IPC_CHANNELS.GET_STAGING_DIR]();
     expect(dir).toBeTruthy();
 
-    const setRes = (await handlers['set-staging-dir'](null, '/tmp/custom_ipc_staging')) as {
+    const setRes = (await handlers[IPC_CHANNELS.SET_STAGING_DIR](
+      null,
+      '/tmp/custom_ipc_staging'
+    )) as {
       success: boolean;
       stagingDir: string;
     };
@@ -50,15 +54,18 @@ describe('IPC Handlers', () => {
   });
 
   test('handles get-history and get-reports IPC calls', async () => {
-    const history = await handlers['get-history']();
+    const history = await handlers[IPC_CHANNELS.GET_HISTORY]();
     expect(Array.isArray(history)).toBe(true);
 
-    const reports = await handlers['get-reports'](null, 'sha123');
+    const reports = await handlers[IPC_CHANNELS.GET_REPORTS](null, 'sha123');
     expect(Array.isArray(reports)).toBe(true);
   });
 
   test('handles detect-branch IPC call', async () => {
-    const res = (await handlers['detect-branch'](null, 'git@github.com:org/repo.git')) as {
+    const res = (await handlers[IPC_CHANNELS.DETECT_BRANCH](
+      null,
+      'git@github.com:org/repo.git'
+    )) as {
       branch: string;
     };
     expect(res.branch).toBeTruthy();
@@ -66,9 +73,9 @@ describe('IPC Handlers', () => {
 
   test('handles abort-review IPC call when active process exists', async () => {
     jest.spyOn(agentInvoker, 'abortExecution').mockReturnValue(true);
-    const res = (await handlers['abort-review']()) as { success: boolean };
+    const res = (await handlers[IPC_CHANNELS.ABORT_REVIEW]()) as { success: boolean };
     expect(res.success).toBe(true);
-    expect(mockWindow.webContents.send).toHaveBeenCalledWith('review-state-update', {
+    expect(mockWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.REVIEW_STATE_UPDATE, {
       stage: 'aborted',
       error: 'User aborted execution',
     });
@@ -88,17 +95,20 @@ describe('IPC Handlers', () => {
     });
     jest.spyOn(agentInvoker, 'runAgent').mockResolvedValue({ success: true });
 
-    const res = (await handlers['start-review'](null, {
+    const res = (await handlers[IPC_CHANNELS.START_REVIEW](null, {
       gitUrl: 'git@github.com:org/repo.git',
       branch: 'main',
     })) as { success: boolean };
     expect(res.success).toBe(true);
-    expect(mockWindow.webContents.send).toHaveBeenCalledWith('log-entry', expect.anything());
+    expect(mockWindow.webContents.send).toHaveBeenCalledWith(
+      IPC_CHANNELS.LOG_ENTRY,
+      expect.anything()
+    );
   });
 
   test('ignores sendStateUpdate and sendLogEntry if window is destroyed', async () => {
     mockWindow.isDestroyed.mockReturnValue(true);
-    const res = (await handlers['start-review'](null, { gitUrl: '', branch: '' })) as {
+    const res = (await handlers[IPC_CHANNELS.START_REVIEW](null, { gitUrl: '', branch: '' })) as {
       success: boolean;
     };
     expect(res.success).toBe(false);
