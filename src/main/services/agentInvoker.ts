@@ -1,8 +1,8 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
 import { LogEntry } from '../../shared/types';
 import { getPromptFilePath } from '../config';
+import { reportService } from './reportService';
 
 export class AgentInvoker {
   private activeProcess: ChildProcess | null = null;
@@ -38,8 +38,8 @@ export class AgentInvoker {
     let promptContent = '';
     try {
       promptContent = fs.readFileSync(promptPath, 'utf-8');
-    } catch (err: any) {
-      const msg = `Failed to read prompt file: ${err?.message || err}`;
+    } catch (err: unknown) {
+      const msg = `Failed to read prompt file: ${(err as Error)?.message || String(err)}`;
       log(`[AGENT ERROR] ${msg}`, 'stderr');
       return { success: false, error: msg };
     }
@@ -76,7 +76,10 @@ export class AgentInvoker {
           if (line.trim()) {
             // Check for missing alias/command notice
             if (line.includes('command not found') || line.includes('run-agent: not found')) {
-              log(`[AGENT WARNING] 'run-agent' command or shell alias was not found in environment PATH. Ensure agentflow or run-agent is installed and aliased.`, 'stderr');
+              log(
+                `[AGENT WARNING] 'run-agent' command or shell alias was not found in environment PATH. Ensure agentflow or run-agent is installed and aliased.`,
+                'stderr'
+              );
             }
             log(line, 'stderr');
           }
@@ -98,7 +101,7 @@ export class AgentInvoker {
         }
 
         // Attempt stdout fallback report extraction if no files on disk
-        this.extractReportFromStdout(stdoutLines, stagedDir, log);
+        reportService.extractReportFromStdout(stdoutLines, stagedDir, (msg) => log(msg, 'agent'));
 
         if (code === 0) {
           log(`[AGENT] Execution completed successfully (exit code 0).`, 'agent');
@@ -109,81 +112,6 @@ export class AgentInvoker {
         }
       });
     });
-  }
-
-  /**
-   * Fallback extraction: Parses streamed stdout lines to recover markdown review report
-   * if the container agent wrote to an unmounted path or failed to save to disk.
-   */
-  private extractReportFromStdout(
-    stdoutLines: string[],
-    stagedDir: string,
-    log: (msg: string, source?: LogEntry['source']) => void
-  ): boolean {
-    const reportsDir = path.join(stagedDir, 'reports');
-    if (fs.existsSync(reportsDir)) {
-      const existing = fs.readdirSync(reportsDir).filter((f) => {
-        if (!f.endsWith('.md')) return false;
-        try {
-          const stat = fs.statSync(path.join(reportsDir, f));
-          return stat.size > 10;
-        } catch {
-          return false;
-        }
-      });
-      if (existing.length > 0) {
-        return true;
-      }
-    }
-
-    let startIndex = -1;
-    for (let i = 0; i < stdoutLines.length; i++) {
-      const line = stdoutLines[i].trim();
-      if (
-        line.startsWith('# Code Smell') ||
-        line.startsWith('# Code Review') ||
-        line.startsWith('# Deliverables') ||
-        line.startsWith('# Executive Summary') ||
-        line.startsWith('# 1. Executive Summary') ||
-        line.startsWith('# ')
-      ) {
-        startIndex = i;
-        break;
-      }
-    }
-
-    if (startIndex === -1) {
-      return false;
-    }
-
-    const reportLines: string[] = [];
-    for (let i = startIndex; i < stdoutLines.length; i++) {
-      const line = stdoutLines[i];
-      if (
-        line.includes('🏁 Session Finished') ||
-        line.includes('📊 Usage:') ||
-        line.includes('❌ Session failed')
-      ) {
-        break;
-      }
-      if (!line.includes('🛠️ [Tool Use:')) {
-        reportLines.push(line);
-      }
-    }
-
-    if (reportLines.length === 0) {
-      return false;
-    }
-
-    const reportText = reportLines.join('\n').trim();
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
-    }
-
-    const targetPath = path.join(reportsDir, 'code_smells.md');
-    fs.writeFileSync(targetPath, reportText, 'utf-8');
-    log(`[AGENT STDOUT FALLBACK] Extracted report from stdout stream and saved to ${targetPath}`, 'agent');
-    return true;
   }
 
   /**

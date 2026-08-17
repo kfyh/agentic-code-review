@@ -1,4 +1,4 @@
-import { exec, spawn } from 'node:child_process';
+import { exec } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,22 +23,26 @@ export class GitService {
 
     try {
       // 10 second timeout for remote lookup
-      const { stdout } = await execAsync(`git ls-remote --symref ${this.escapeShellArg(cleanUrl)} HEAD`, {
-        timeout: 10000,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-      });
+      const { stdout } = await execAsync(
+        `git ls-remote --symref ${this.escapeShellArg(cleanUrl)} HEAD`,
+        {
+          timeout: 10000,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        }
+      );
 
       // Parse ref: refs/heads/<branch>
       const match = stdout.match(/ref:\s+refs\/heads\/([^\s]+)\s+HEAD/);
       if (match && match[1]) {
         return { branch: match[1], isFallback: false };
       }
-    } catch (err: any) {
-      console.warn(`Default branch query failed for ${cleanUrl}:`, err?.message || err);
+    } catch (err: unknown) {
+      const errorObj = err as { message?: string; stderr?: string };
+      console.warn(`Default branch query failed for ${cleanUrl}:`, errorObj?.message || err);
       return {
         branch: 'main',
         isFallback: true,
-        error: err?.stderr || err?.message || 'Failed to detect remote default branch',
+        error: errorObj?.stderr || errorObj?.message || 'Failed to detect remote default branch',
       };
     }
 
@@ -79,7 +83,11 @@ export class GitService {
 
     if (!fs.existsSync(cacheDir)) {
       log(`[GIT] Cloning repository into cache (${cacheDir})...`);
-      await this.runGitCommand(`clone ${this.escapeShellArg(cleanUrl)} ${this.escapeShellArg(cacheDir)}`, undefined, log);
+      await this.runGitCommand(
+        `clone ${this.escapeShellArg(cleanUrl)} ${this.escapeShellArg(cacheDir)}`,
+        undefined,
+        log
+      );
     } else {
       log(`[GIT] Repository cache exists. Fetching updates from origin...`);
       await this.runGitCommand(`fetch origin`, cacheDir, log);
@@ -91,14 +99,20 @@ export class GitService {
     } catch {
       log(`[GIT] Fetching and checking out origin/${cleanBranch}...`);
       await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
-      await this.runGitCommand(`checkout -B ${this.escapeShellArg(cleanBranch)} origin/${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
+      await this.runGitCommand(
+        `checkout -B ${this.escapeShellArg(cleanBranch)} origin/${this.escapeShellArg(cleanBranch)}`,
+        cacheDir,
+        log
+      );
     }
 
     log(`[GIT] Syncing with origin/${cleanBranch}...`);
     try {
       await this.runGitCommand(`pull origin ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
-    } catch (err: any) {
-      log(`[GIT] Pull notice (using current head state): ${err?.message || err}`);
+    } catch (err: unknown) {
+      log(
+        `[GIT] Pull notice (using current head state): ${(err as Error)?.message || String(err)}`
+      );
     }
 
     log(`[GIT] Resolving commit SHA...`);
@@ -119,7 +133,11 @@ export class GitService {
 
     log(`[GIT] Syncing repo code to workspace directory: ${workspaceDir}`);
     // Sync contents to workspace
-    await this.runGitCommand(`archive ${commitSha} | (cd ${this.escapeShellArg(workspaceDir)} && tar -x)`, cacheDir, log);
+    await this.runGitCommand(
+      `archive ${commitSha} | (cd ${this.escapeShellArg(workspaceDir)} && tar -x)`,
+      cacheDir,
+      log
+    );
 
     return { commitSha, workspaceDir };
   }
@@ -140,8 +158,14 @@ export class GitService {
         },
         (error, stdout, stderr) => {
           if (stderr && stderr.trim()) {
-            if (stderr.toLowerCase().includes('permission denied') || stderr.toLowerCase().includes('publickey')) {
-              log?.(`[GIT SSH AUTH ERROR] SSH Authentication failed. Ensure your host SSH key is configured. Stderr: ${stderr.trim()}`, 'stderr');
+            if (
+              stderr.toLowerCase().includes('permission denied') ||
+              stderr.toLowerCase().includes('publickey')
+            ) {
+              log?.(
+                `[GIT SSH AUTH ERROR] SSH Authentication failed. Ensure your host SSH key is configured. Stderr: ${stderr.trim()}`,
+                'stderr'
+              );
             } else {
               log?.(`[GIT STDERR] ${stderr.trim()}`, 'stderr');
             }

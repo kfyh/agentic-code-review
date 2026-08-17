@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { HistoryEntry, LogEntry, ReviewReport, ReviewStage, ReviewStateUpdate } from '../shared/types';
+import {
+  HistoryEntry,
+  LogEntry,
+  ReviewReport,
+  ReviewStage,
+  ReviewStateUpdate,
+} from '../shared/types';
 import { LogConsole } from './components/LogConsole';
 import { RepoInputForm } from './components/RepoInputForm';
 import { ReportViewer } from './components/ReportViewer';
@@ -16,9 +22,12 @@ export const App: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [reports, setReports] = useState<ReviewReport[]>([]);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
-  
+
   const [isDetectingBranch, setIsDetectingBranch] = useState<boolean>(false);
-  const [detectedBranchInfo, setDetectedBranchInfo] = useState<{ isFallback?: boolean; error?: string } | null>(null);
+  const [detectedBranchInfo, setDetectedBranchInfo] = useState<{
+    isFallback?: boolean;
+    error?: string;
+  } | null>(null);
 
   // Load initial repo history
   useEffect(() => {
@@ -27,9 +36,9 @@ export const App: React.FC = () => {
         if (window.api && window.api.getHistory) {
           const items = await window.api.getHistory();
           setHistory(items);
-          if (items.length > 0 && !gitUrl) {
-            setGitUrl(items[0].gitUrl);
-            setBranch(items[0].lastBranch);
+          if (items.length > 0) {
+            setGitUrl((prev) => prev || items[0].gitUrl);
+            setBranch((prev) => prev || items[0].lastBranch);
           }
         }
       } catch (err) {
@@ -85,9 +94,12 @@ export const App: React.FC = () => {
       } else {
         setDetectedBranchInfo({ isFallback: true, error: res.error });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsDetectingBranch(false);
-      setDetectedBranchInfo({ isFallback: true, error: err?.message || 'Branch detection query failed' });
+      setDetectedBranchInfo({
+        isFallback: true,
+        error: (err as Error)?.message || 'Branch detection query failed',
+      });
     }
   };
 
@@ -142,7 +154,12 @@ export const App: React.FC = () => {
         history={history}
         onStartReview={handleStartReview}
         isDetectingBranch={isDetectingBranch}
-        isReviewRunning={stage === 'fetching' || stage === 'installing' || stage === 'staging' || stage === 'running'}
+        isReviewRunning={
+          stage === 'fetching' ||
+          stage === 'installing' ||
+          stage === 'staging' ||
+          stage === 'running'
+        }
         detectedBranchInfo={detectedBranchInfo}
         onUrlBlurOrSelect={handleUrlBlurOrSelect}
       />

@@ -41,7 +41,11 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        event.target instanceof Node &&
+        !dropdownRef.current.contains(event.target)
+      ) {
         setShowHistoryDropdown(false);
       }
     };
@@ -71,10 +75,12 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
     }
   };
 
-  const formatTimeAgo = (isoString: string) => {
+  const [now] = useState(() => Date.now());
+
+  const formatTimeAgo = (isoString: string, currentTimestamp: number) => {
     try {
       const date = new Date(isoString);
-      const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60000);
+      const diffMinutes = Math.floor((currentTimestamp - date.getTime()) / 60000);
       if (diffMinutes < 60) return `${diffMinutes} mins ago`;
       const diffHours = Math.floor(diffMinutes / 60);
       if (diffHours < 24) return `${diffHours} hours ago`;
@@ -103,7 +109,14 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
               <button
                 type="button"
                 className="field-hint"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
                 onClick={() => setShowHistoryDropdown(!showHistoryDropdown)}
               >
                 <History size={12} />
@@ -130,7 +143,15 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
           {/* History Dropdown Menu */}
           {showHistoryDropdown && history.length > 0 && (
             <div className="dropdown-menu">
-              <div style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', borderBottom: '1px solid var(--border-color)' }}>
+              <div
+                style={{
+                  padding: '0.4rem 0.8rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: 'var(--text-dim)',
+                  borderBottom: '1px solid var(--border-color)',
+                }}
+              >
                 Recent Repositories
               </div>
               {history.map((item, idx) => (
@@ -141,7 +162,8 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
                 >
                   <div className="dropdown-url">{item.gitUrl}</div>
                   <div className="dropdown-meta">
-                    Branch: <span style={{ color: 'var(--accent-cyan)' }}>{item.lastBranch}</span> • {formatTimeAgo(item.lastReviewedAt)}
+                    Branch: <span style={{ color: 'var(--accent-cyan)' }}>{item.lastBranch}</span> •{' '}
+                    {formatTimeAgo(item.lastReviewedAt, now)}
                   </div>
                 </div>
               ))}
@@ -156,15 +178,28 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
               <GitBranch size={14} /> Branch Name
             </span>
             {isDetectingBranch ? (
-              <span className="field-hint" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span
+                className="field-hint"
+                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
                 <RefreshCw size={12} className="spin" /> Detecting...
               </span>
             ) : detectedBranchInfo?.isFallback ? (
-              <span className="field-hint" style={{ color: 'var(--status-warn)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span
+                className="field-hint"
+                style={{
+                  color: 'var(--status-warn)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
                 <AlertCircle size={12} /> Fallback
               </span>
             ) : branch ? (
-              <span className="field-hint" style={{ color: 'var(--status-success)' }}>Auto-detected</span>
+              <span className="field-hint" style={{ color: 'var(--status-success)' }}>
+                Auto-detected
+              </span>
             ) : null}
           </label>
           <div className="input-wrapper">

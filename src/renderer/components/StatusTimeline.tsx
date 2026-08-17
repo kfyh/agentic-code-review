@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReviewStage } from '../../shared/types';
-import { CheckCircle2, Circle, AlertTriangle, XCircle, Loader2, FileText } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, Loader2, FileText } from 'lucide-react';
 
 interface StatusTimelineProps {
   stage: ReviewStage;
@@ -10,7 +10,13 @@ interface StatusTimelineProps {
   onOpenReport?: () => void;
 }
 
-export const StatusTimeline: React.FC<StatusTimelineProps> = ({ stage, commitSha, error, hasReport, onOpenReport }) => {
+export const StatusTimeline: React.FC<StatusTimelineProps> = ({
+  stage,
+  commitSha,
+  error,
+  hasReport,
+  onOpenReport,
+}) => {
   const stages: { key: ReviewStage; label: string }[] = [
     { key: 'fetching', label: 'Fetching Branch' },
     { key: 'staging', label: 'Staging Prep' },
@@ -20,22 +26,48 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ stage, commitSha
 
   const getStageIndex = (currentStage: ReviewStage): number => {
     switch (currentStage) {
-      case 'fetching': return 0;
-      case 'installing': return 0;
-      case 'staging': return 1;
-      case 'running': return 2;
-      case 'completed': return 3;
+      case 'fetching':
+        return 0;
+      case 'installing':
+        return 0;
+      case 'staging':
+        return 1;
+      case 'running':
+        return 2;
+      case 'completed':
+        return 3;
       case 'failed':
-      case 'aborted': return 3;
-      default: return -1;
+      case 'aborted':
+        return 3;
+      default:
+        return -1;
     }
   };
 
   const currentIndex = getStageIndex(stage);
 
+  const getStepStatus = (
+    currentStage: ReviewStage,
+    currIndex: number,
+    stepIndex: number
+  ): 'completed' | 'active' | 'failed' | 'pending' => {
+    if (currentStage === 'completed' || currIndex > stepIndex) return 'completed';
+    if (currentStage === 'failed' || currentStage === 'aborted') {
+      return currIndex === stepIndex ? 'failed' : 'pending';
+    }
+    return currIndex === stepIndex ? 'active' : 'pending';
+  };
+
   return (
     <div className="glass-panel" style={{ padding: '1rem 1.25rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '0.75rem',
+        }}
+      >
         <div style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-muted)' }}>
           Execution Pipeline Stage
         </div>
@@ -53,7 +85,13 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ stage, commitSha
           )}
 
           {commitSha && (
-            <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>
+            <div
+              style={{
+                fontSize: '0.75rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--accent-cyan)',
+              }}
+            >
               SHA: {commitSha.substring(0, 8)}...
             </div>
           )}
@@ -62,16 +100,15 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ stage, commitSha
 
       <div className="timeline-container">
         {stages.map((s, idx) => {
-          const isCompleted = currentIndex > idx || stage === 'completed';
-          const isActive = currentIndex === idx && stage !== 'completed' && stage !== 'failed' && stage !== 'aborted';
-          const isFailed = (stage === 'failed' || stage === 'aborted') && currentIndex === idx;
+          const status = getStepStatus(stage, currentIndex, idx);
+          const isCompleted = status === 'completed';
+          const isActive = status === 'active';
+          const isFailed = status === 'failed';
 
           return (
             <React.Fragment key={s.key}>
               <div className="timeline-step">
-                <div
-                  className={`step-circle ${isCompleted ? 'completed' : isActive ? 'active' : isFailed ? 'failed' : ''}`}
-                >
+                <div className={`step-circle ${status}`}>
                   {isCompleted ? (
                     <CheckCircle2 size={18} />
                   ) : isActive ? (

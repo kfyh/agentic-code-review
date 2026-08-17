@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { app } from 'electron';
 import {
   getBaseAppDir,
   getUserDataDir,
@@ -9,6 +10,7 @@ import {
   getHistoryFilePath,
   getGitCacheDir,
   getWorkspacesDir,
+  getPromptFilePath,
 } from '../src/main/config';
 
 describe('Config Module', () => {
@@ -32,6 +34,15 @@ describe('Config Module', () => {
   test('getUserDataDir returns expected path', () => {
     const dir = getUserDataDir();
     expect(dir).toBeTruthy();
+  });
+
+  test('getUserDataDir returns fallback path if app.getPath throws', () => {
+    const spy = jest.spyOn(app, 'getPath').mockImplementation(() => {
+      throw new Error('Not ready');
+    });
+    const dir = getUserDataDir();
+    expect(dir).toBe(path.join(os.homedir(), '.agentic-code-review'));
+    spy.mockRestore();
   });
 
   test('getHistoryFilePath returns repo_history.json in userDataDir', () => {
@@ -67,5 +78,10 @@ describe('Config Module', () => {
     delete process.env.STAGING_DIR;
     process.env.CODE_REVIEW_STAGING_DIR = '/env/code_review_staging';
     expect(getStagingBaseDir()).toBe('/env/code_review_staging');
+  });
+
+  test('getPromptFilePath returns code-review-prompt.md in process.cwd', () => {
+    const promptPath = getPromptFilePath();
+    expect(promptPath).toBe(path.join(process.cwd(), 'code-review-prompt.md'));
   });
 });

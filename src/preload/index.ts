@@ -11,7 +11,7 @@ const api: WindowApi = {
   setStagingDir: (dir: string) => ipcRenderer.invoke('set-staging-dir', dir),
 
   onStateUpdate: (callback: (update: ReviewStateUpdate) => void) => {
-    const subscription = (_: any, update: ReviewStateUpdate) => callback(update);
+    const subscription = (_: unknown, update: ReviewStateUpdate) => callback(update);
     ipcRenderer.on('review-state-update', subscription);
     return () => {
       ipcRenderer.removeListener('review-state-update', subscription);
@@ -19,7 +19,7 @@ const api: WindowApi = {
   },
 
   onLogEntry: (callback: (log: LogEntry) => void) => {
-    const subscription = (_: any, log: LogEntry) => callback(log);
+    const subscription = (_: unknown, log: LogEntry) => callback(log);
     ipcRenderer.on('log-entry', subscription);
     return () => {
       ipcRenderer.removeListener('log-entry', subscription);

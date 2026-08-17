@@ -20,7 +20,8 @@
   --status-error: #ef4444;
   --status-warn: #f59e0b;
 
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans:
+    'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 }
 
@@ -32,7 +33,7 @@
 
 body {
   background-color: var(--bg-dark);
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
   color: var(--text-main);
@@ -320,9 +321,15 @@ body {
 }
 
 @keyframes pulse-glow {
-  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(56, 189, 248, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+  }
 }
 
 .step-label {
@@ -416,11 +423,26 @@ body {
   white-space: nowrap;
 }
 
-.log-tag.app { background: rgba(56, 189, 248, 0.2); color: var(--accent-cyan); }
-.log-tag.git { background: rgba(99, 102, 241, 0.2); color: var(--accent-indigo); }
-.log-tag.staging { background: rgba(168, 85, 247, 0.2); color: var(--accent-purple); }
-.log-tag.agent { background: rgba(34, 197, 94, 0.2); color: var(--status-success); }
-.log-tag.stderr { background: rgba(239, 68, 68, 0.2); color: var(--status-error); }
+.log-tag.app {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--accent-cyan);
+}
+.log-tag.git {
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--accent-indigo);
+}
+.log-tag.staging {
+  background: rgba(168, 85, 247, 0.2);
+  color: var(--accent-purple);
+}
+.log-tag.agent {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--status-success);
+}
+.log-tag.stderr {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--status-error);
+}
 
 .log-msg {
   color: var(--text-main);
@@ -452,7 +474,9 @@ body {
   background: rgba(15, 23, 42, 0.95);
   border: 1px solid var(--border-accent);
   border-radius: 16px;
-  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 35px rgba(56, 189, 248, 0.15);
+  box-shadow:
+    0 25px 60px -15px rgba(0, 0, 0, 0.8),
+    0 0 35px rgba(56, 189, 248, 0.15);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -460,13 +484,23 @@ body {
 }
 
 @keyframes modalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes modalScaleUp {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .modal-header {
@@ -561,7 +595,9 @@ body {
   border-radius: 6px 6px 0 0;
 }
 
-.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
   color: var(--text-main);
   margin-top: 1.25rem;
   margin-bottom: 0.75rem;
@@ -574,7 +610,8 @@ body {
   color: #cbd5e1;
 }
 
-.markdown-body ul, .markdown-body ol {
+.markdown-body ul,
+.markdown-body ol {
   margin-left: 1.5rem;
   margin-bottom: 1rem;
   color: #cbd5e1;
@@ -610,7 +647,8 @@ body {
   margin-bottom: 1.25rem;
 }
 
-.markdown-body th, .markdown-body td {
+.markdown-body th,
+.markdown-body td {
   border: 1px solid var(--border-color);
   padding: 0.6rem 0.85rem;
   text-align: left;

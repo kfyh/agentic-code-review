@@ -10,8 +10,14 @@ describe('StagingService', () => {
   const mockCommitSha = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4';
 
   beforeEach(() => {
-    mockWorkspaceDir = path.join(os.tmpdir(), `jest_workspace_${Date.now()}_${Math.random().toString(36).substring(7)}`);
-    customStagingBase = path.join(os.tmpdir(), `jest_staging_${Date.now()}_${Math.random().toString(36).substring(7)}`);
+    mockWorkspaceDir = path.join(
+      os.tmpdir(),
+      `jest_workspace_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    );
+    customStagingBase = path.join(
+      os.tmpdir(),
+      `jest_staging_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    );
     setStagingDir(customStagingBase);
 
     // Create mock workspace directory structure
@@ -58,5 +64,21 @@ describe('StagingService', () => {
     expect(contextData.branch).toBe('main');
     expect(contextData.commitSha).toBe(mockCommitSha);
     expect(contextData.stagedAt).toBeTruthy();
+  });
+
+  test('cleans pre-existing staging directory when re-preparing', () => {
+    const existingStaged = path.join(customStagingBase, mockCommitSha);
+    fs.mkdirSync(existingStaged, { recursive: true });
+    fs.writeFileSync(path.join(existingStaged, 'old_file.txt'), 'old data');
+
+    const { stagedDir } = stagingService.prepareStagingWorkspace(
+      mockWorkspaceDir,
+      'git@github.com:org/repo.git',
+      'main',
+      mockCommitSha
+    );
+
+    expect(fs.existsSync(stagedDir)).toBe(true);
+    expect(fs.existsSync(path.join(stagedDir, 'old_file.txt'))).toBe(false);
   });
 });

@@ -5,6 +5,7 @@
 This document specifies the Phase 1 MVP design for the **Code Review Desktop Application**. Phase 1 implements a single-repository code review workflow powered by shelling out directly to `run-agent` (aliased in the environment shell).
 
 The MVP focuses on simplicity and speed:
+
 - A startup screen with an SSH Git repository URL input box equipped with a **recent repository history** dropdown.
 - Automatic remote branch detection via `git ls-remote --symref` to pre-populate the default branch (e.g., `main`, `master`, `develop`), which the user can override.
 - Local persistence of valid Git URLs and branches where a code review was started.
@@ -74,6 +75,7 @@ The MVP focuses on simplicity and speed:
 ```
 
 ### Flow Steps:
+
 1. **URL Entry & Default Branch Auto-Detection**:
    - User enters or selects a previously reviewed SSH Git URL (`git@github.com:owner/repo.git`) from the history dropdown.
    - Upon input blur or history selection, the app executes `git ls-remote --symref <gitUrl> HEAD` to query the remote's default branch.
@@ -99,27 +101,35 @@ The MVP focuses on simplicity and speed:
 ## 3. Host Workspace & Git Operations
 
 ### Environment Assumption
+
 - The host machine has SSH keys already configured (`~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.) and added to the SSH agent.
 - `run-agent` is an established shell alias or binary available on PATH in the shell execution environment.
 - Git operations rely directly on the host's native `git` CLI via SSH.
 
 ### Remote Default Branch Detection Logic
+
 To detect the remote repository's default branch prior to review start:
+
 ```bash
 git ls-remote --symref <gitUrl> HEAD
 ```
+
 Extracted branch: `main`. Fallback if query times out or fails: `main`.
 
 ### Host Dependency Installation (`npm install`)
+
 After git checkout and before staging copy, `gitService` / `installService` runs:
+
 ```bash
 npm install --no-audit --no-fund
 ```
+
 - Executed on the **host machine** prior to staging copy.
 - Resolves package graphs and `node_modules` required for AST analysis tools (`ts-morph`, `madge`, `dpdm`).
 - Avoids running `npm install` inside the container runtime.
 
 ### Repository History Persistence (`historyService`)
+
 - Storage location: `path.join(app.getPath('userData'), 'repo_history.json')`.
 - Trigger: Added/updated when Git fetch/checkout succeeds and review is started.
 - Sorting: Reverse-chronological (`lastReviewedAt`).
@@ -132,10 +142,12 @@ npm install --no-audit --no-fund
 Before mounting code into the Docker container, the host creates an isolated staging workspace to enforce security boundaries.
 
 ### Exclusions & Security Rules
+
 - Exclude `.git/`: Prevents raw git object inspection, history scraping, and git execution inside the container.
 - Exclude `CLAUDE.md`: Prevents file-based prompt injection attacks that target Claude Code prior to system prompt evaluation.
 
 ### Staging Procedure
+
 1. Create staging directory: `stagedDir = path.join(os.tmpdir(), 'code-review-app', 'staged', commitSha)`.
 2. Copy files from `workspaceDir` to `stagedDir` excluding `.git/` and `CLAUDE.md`:
    ```bash
@@ -158,6 +170,7 @@ Before mounting code into the Docker container, the host creates an isolated sta
 Phase 1 delegates execution by calling `run-agent` directly via shell subprocess execution.
 
 ### Command Construction
+
 - **Executable**: `run-agent` (executed through a shell wrapper like `bash -i -c` or `sh -c` to inherit user shell aliases).
 - **Prompt Source**: `code-review-prompt.md`.
 - **Invocation Command**:
@@ -170,6 +183,7 @@ Phase 1 delegates execution by calling `run-agent` directly via shell subprocess
 ## 6. Application Architecture & File Layout
 
 ### File Structure
+
 ```
 code-review-app/
 ├── src/
@@ -205,6 +219,7 @@ code-review-app/
 ```
 
 ### Shared IPC Type Definitions (`src/shared/types.ts`)
+
 ```typescript
 export interface HistoryEntry {
   gitUrl: string;
@@ -218,7 +233,8 @@ export interface ReviewRequest {
   branch: string;
 }
 
-export type ReviewStage = 'idle' | 'fetching' | 'installing' | 'staging' | 'running' | 'completed' | 'failed' | 'aborted';
+export type ReviewStage =
+  'idle' | 'fetching' | 'installing' | 'staging' | 'running' | 'completed' | 'failed' | 'aborted';
 
 export interface LogEntry {
   timestamp: string;
@@ -245,10 +261,12 @@ export interface ReviewStateUpdate {
 ## 7. Renderer UI Components & Security
 
 ### Security Constraints
+
 - `contextIsolation: true`, `nodeIntegration: false`.
 - DOMPurify sanitization applied to all rendered Markdown content.
 
 ### UI Components Specification
+
 1. **RepoInputForm**:
    - `gitUrl` text input field with autocomplete / recent repositories dropdown menu.
    - `branch` text input field pre-filled automatically via remote `git ls-remote --symref` query or selected history entry.
@@ -264,14 +282,14 @@ export interface ReviewStateUpdate {
 
 ## 8. Error Handling & Edge Cases
 
-| Failure Mode | Cause | Handling Strategy |
-|---|---|---|
-| Remote Default Branch Query Failure | Network latency or invalid URL | Fallback to `main` automatically; allow user manual entry. |
-| Host `npm install` Failure | Missing package or private registry auth | Capture `npm install` stderr, log warning, and proceed with staging so static AST analysis can still run on available source files. |
-| Invalid Branch / Repo Failure | Remote fetch fails | Do NOT add/update entry in history list until Git fetch succeeds. |
-| SSH Key Error | Missing host SSH auth | Capture `git` stderr, show prompt explaining host SSH key requirement. |
-| Missing `run-agent` alias | Shell alias not loaded | Pre-flight test `which run-agent` or shell command test; alert user if `run-agent` command not found. |
-| User Abort | User clicks "Abort" | Process SIGTERM sent to active subprocess; UI transitions to `aborted`. |
+| Failure Mode                        | Cause                                    | Handling Strategy                                                                                                                   |
+| ----------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Remote Default Branch Query Failure | Network latency or invalid URL           | Fallback to `main` automatically; allow user manual entry.                                                                          |
+| Host `npm install` Failure          | Missing package or private registry auth | Capture `npm install` stderr, log warning, and proceed with staging so static AST analysis can still run on available source files. |
+| Invalid Branch / Repo Failure       | Remote fetch fails                       | Do NOT add/update entry in history list until Git fetch succeeds.                                                                   |
+| SSH Key Error                       | Missing host SSH auth                    | Capture `git` stderr, show prompt explaining host SSH key requirement.                                                              |
+| Missing `run-agent` alias           | Shell alias not loaded                   | Pre-flight test `which run-agent` or shell command test; alert user if `run-agent` command not found.                               |
+| User Abort                          | User clicks "Abort"                      | Process SIGTERM sent to active subprocess; UI transitions to `aborted`.                                                             |
 
 ---
 

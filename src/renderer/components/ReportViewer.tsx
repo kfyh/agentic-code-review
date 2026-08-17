@@ -13,12 +13,6 @@ interface ReportViewerProps {
 export const ReportViewer: React.FC<ReportViewerProps> = ({ reports, isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<number>(0);
 
-  useEffect(() => {
-    if (reports.length > 0) {
-      setActiveTab(0);
-    }
-  }, [reports]);
-
   // Handle Escape key press to dismiss modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -36,10 +30,10 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reports, isOpen, onC
 
   const renderSanitizedMarkdown = (content: string) => {
     try {
-      const rawHtml = marked.parse(content) as string;
+      const rawHtml = String(marked.parse(content));
       const cleanHtml = DOMPurify.sanitize(rawHtml);
       return { __html: cleanHtml };
-    } catch (err) {
+    } catch {
       return { __html: '<p>Failed to render report markdown content.</p>' };
     }
   };
@@ -85,8 +79,20 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reports, isOpen, onC
         {/* Modal Body / Report Content */}
         <div className="modal-body markdown-body">
           {reports.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
-              <CheckCircle2 size={42} style={{ color: 'var(--status-success)', marginBottom: '0.75rem' }} />
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <CheckCircle2
+                size={42}
+                style={{ color: 'var(--status-success)', marginBottom: '0.75rem' }}
+              />
               <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>Review Completed</div>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: '0.25rem' }}>
                 No markdown reports were found in the output reports directory.
