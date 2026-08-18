@@ -32,9 +32,14 @@ export class InstallService {
     }
 
     const hasLockFile = fs.existsSync(path.join(workspaceDir, 'package-lock.json'));
-    const command = hasLockFile ? 'npm ci --no-audit --no-fund' : 'npm install --no-audit --no-fund';
+    const command = hasLockFile
+      ? 'npm ci --no-audit --no-fund'
+      : 'npm install --no-audit --no-fund';
 
-    log(`[INSTALL] Executing host dependency installation: ${command} in ${workspaceDir}...`, 'install');
+    log(
+      `[INSTALL] Executing host dependency installation: ${command} in ${workspaceDir}...`,
+      'install'
+    );
 
     try {
       const { stdout, stderr } = await execAsync(command, {
@@ -57,10 +62,14 @@ export class InstallService {
 
       log(`[INSTALL] Host dependency installation completed successfully.`, 'install');
       return { success: true, installed: true };
-    } catch (err: any) {
-      const errMsg = err?.stderr || err?.message || String(err);
+    } catch (err: unknown) {
+      const errorObj = err as { stderr?: string; message?: string };
+      const errMsg = errorObj?.stderr || errorObj?.message || String(err);
       log(`[INSTALL WARNING] npm install failed or completed with warnings: ${errMsg}`, 'stderr');
-      log(`[INSTALL NOTICE] Proceeding with staging so static analysis can analyze available source files.`, 'install');
+      log(
+        `[INSTALL NOTICE] Proceeding with staging so static analysis can analyze available source files.`,
+        'install'
+      );
       return { success: false, installed: false, error: errMsg };
     }
   }

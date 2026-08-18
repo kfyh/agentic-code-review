@@ -1,28 +1,28 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { LogEntry, ReviewRequest, ReviewStateUpdate, WindowApi } from '../shared/types';
+import { IPC_CHANNELS, LogEntry, ReviewRequest, ReviewStateUpdate, WindowApi } from '../shared/types';
 
 const api: WindowApi = {
-  detectBranch: (gitUrl: string) => ipcRenderer.invoke('detect-branch', gitUrl),
-  startReview: (req: ReviewRequest) => ipcRenderer.invoke('start-review', req),
-  abortReview: () => ipcRenderer.invoke('abort-review'),
-  getHistory: () => ipcRenderer.invoke('get-history'),
-  getReports: (commitSha: string) => ipcRenderer.invoke('get-reports', commitSha),
-  getStagingDir: () => ipcRenderer.invoke('get-staging-dir'),
-  setStagingDir: (dir: string) => ipcRenderer.invoke('set-staging-dir', dir),
+  detectBranch: (gitUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.DETECT_BRANCH, gitUrl),
+  startReview: (req: ReviewRequest) => ipcRenderer.invoke(IPC_CHANNELS.START_REVIEW, req),
+  abortReview: () => ipcRenderer.invoke(IPC_CHANNELS.ABORT_REVIEW),
+  getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),
+  getReports: (commitSha: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_REPORTS, commitSha),
+  getStagingDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_STAGING_DIR),
+  setStagingDir: (dir: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_STAGING_DIR, dir),
 
   onStateUpdate: (callback: (update: ReviewStateUpdate) => void) => {
-    const subscription = (_: any, update: ReviewStateUpdate) => callback(update);
-    ipcRenderer.on('review-state-update', subscription);
+    const subscription = (_: unknown, update: ReviewStateUpdate) => callback(update);
+    ipcRenderer.on(IPC_CHANNELS.REVIEW_STATE_UPDATE, subscription);
     return () => {
-      ipcRenderer.removeListener('review-state-update', subscription);
+      ipcRenderer.removeListener(IPC_CHANNELS.REVIEW_STATE_UPDATE, subscription);
     };
   },
 
   onLogEntry: (callback: (log: LogEntry) => void) => {
-    const subscription = (_: any, log: LogEntry) => callback(log);
-    ipcRenderer.on('log-entry', subscription);
+    const subscription = (_: unknown, log: LogEntry) => callback(log);
+    ipcRenderer.on(IPC_CHANNELS.LOG_ENTRY, subscription);
     return () => {
-      ipcRenderer.removeListener('log-entry', subscription);
+      ipcRenderer.removeListener(IPC_CHANNELS.LOG_ENTRY, subscription);
     };
   },
 };

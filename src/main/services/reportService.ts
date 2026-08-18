@@ -4,7 +4,13 @@ import path from 'node:path';
 import { ReviewReport } from '../../shared/types';
 import { getStagedDir } from '../config';
 
-const IGNORED_MARKDOWN_FILES = new Set(['readme.md', 'tasklist.md', 'changelog.md', 'contributing.md', 'claude.md']);
+const IGNORED_MARKDOWN_FILES = new Set([
+  'readme.md',
+  'tasklist.md',
+  'changelog.md',
+  'contributing.md',
+  'claude.md',
+]);
 
 export class ReportService {
   /**
@@ -91,6 +97,89 @@ export class ReportService {
     }
   }
 
+  /**
+   * Fallback extraction: Parses streamed stdout lines to recover markdown review report
+   * if the container agent wrote to an unmounted path or failed to save to disk.
+   */
+  public extractReportFromStdout(
+    stdoutLines: string[],
+    stagedDir: string,
+    onLog?: (msg: string) => void
+  ): boolean {
+    const reportsDir = path.join(stagedDir, 'reports');
+    if (fs.existsSync(reportsDir)) {
+      try {
+        const existing = fs.readdirSync(reportsDir).filter((f) => {
+          if (!f.endsWith('.md')) return false;
+          try {
+            const stat = fs.statSync(path.join(reportsDir, f));
+            return stat.size > 10;
+          } catch {
+            return false;
+          }
+        });
+        if (existing.length > 0) {
+          return true;
+        }
+      } catch {
+        // Ignore directory read errors
+      }
+    }
+
+    let startIndex = -1;
+    for (let i = 0; i < stdoutLines.length; i++) {
+      const line = stdoutLines[i].trim();
+      if (
+        line.startsWith('# Code Smell') ||
+        line.startsWith('# Code Review') ||
+        line.startsWith('# Deliverables') ||
+        line.startsWith('# Executive Summary') ||
+        line.startsWith('# 1. Executive Summary') ||
+        line.startsWith('# ')
+      ) {
+        startIndex = i;
+        break;
+      }
+    }
+
+    if (startIndex === -1) {
+      return false;
+    }
+
+    const reportLines: string[] = [];
+    for (let i = startIndex; i < stdoutLines.length; i++) {
+      const line = stdoutLines[i];
+      if (
+        line.includes('🏁 Session Finished') ||
+        line.includes('📊 Usage:') ||
+        line.includes('❌ Session failed')
+      ) {
+        break;
+      }
+      if (!line.includes('🛠️ [Tool Use:')) {
+        reportLines.push(line);
+      }
+    }
+
+    if (reportLines.length === 0) {
+      return false;
+    }
+
+    const reportText = reportLines.join('\n').trim();
+    if (!fs.existsSync(reportsDir)) {
+      fs.mkdirSync(reportsDir, { recursive: true });
+    }
+
+    const targetPath = path.join(reportsDir, 'code_smells.md');
+    fs.writeFileSync(targetPath, reportText, 'utf-8');
+    if (onLog) {
+      onLog(
+        `[AGENT STDOUT FALLBACK] Extracted report from stdout stream and saved to ${targetPath}`
+      );
+    }
+    return true;
+  }
+
   private findRecentReportsRecursive(
     dir: string,
     minTime: number,
@@ -104,7 +193,13 @@ export class ReportService {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           this.findRecentReportsRecursive(fullPath, minTime, addReportFn, depth + 1);
-        } else if (entry.isFile() && entry.name.endsWith('.md') && (entry.name.includes('smells') || entry.name.includes('report') || entry.name.includes('code'))) {
+        } else if (
+          entry.isFile() &&
+          entry.name.endsWith('.md') &&
+          (entry.name.includes('smells') ||
+            entry.name.includes('report') ||
+            entry.name.includes('code'))
+        ) {
           const stat = fs.statSync(fullPath);
           if (stat.mtimeMs >= minTime && stat.size > 10) {
             addReportFn(fullPath);

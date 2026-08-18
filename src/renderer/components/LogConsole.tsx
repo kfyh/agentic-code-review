@@ -49,7 +49,15 @@ export const LogConsole: React.FC<LogConsoleProps> = ({ logs, stage, onAbort, on
 
         <div className="console-actions">
           {/* Source Filters */}
-          <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.3)', padding: '2px', borderRadius: '6px' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: '4px',
+              background: 'rgba(0,0,0,0.3)',
+              padding: '2px',
+              borderRadius: '6px',
+            }}
+          >
             {['all', 'git', 'staging', 'agent', 'stderr'].map((src) => (
               <button
                 key={src}
@@ -115,7 +123,14 @@ export const LogConsole: React.FC<LogConsoleProps> = ({ logs, stage, onAbort, on
 
       <div className="log-stream" ref={logStreamRef}>
         {filteredLogs.length === 0 ? (
-          <div style={{ color: 'var(--text-dim)', fontStyle: 'italic', textAlign: 'center', padding: '2rem' }}>
+          <div
+            style={{
+              color: 'var(--text-dim)',
+              fontStyle: 'italic',
+              textAlign: 'center',
+              padding: '2rem',
+            }}
+          >
             No log entries yet. Ready to start code review execution.
           </div>
         ) : (

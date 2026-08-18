@@ -1,3 +1,5 @@
+export * from './ipcChannels';
+
 export interface HistoryEntry {
   gitUrl: string;
   lastBranch: string;
@@ -10,15 +12,8 @@ export interface ReviewRequest {
   branch: string;
 }
 
-export type ReviewStage = 
-  | 'idle' 
-  | 'fetching' 
-  | 'installing'
-  | 'staging' 
-  | 'running' 
-  | 'completed' 
-  | 'failed' 
-  | 'aborted';
+export type ReviewStage =
+  'idle' | 'fetching' | 'installing' | 'staging' | 'running' | 'completed' | 'failed' | 'aborted';
 
 export interface LogEntry {
   timestamp: string;
@@ -48,7 +43,9 @@ export interface DetectBranchResult {
 
 export interface WindowApi {
   detectBranch: (gitUrl: string) => Promise<DetectBranchResult>;
-  startReview: (req: ReviewRequest) => Promise<{ success: boolean; commitSha?: string; error?: string }>;
+  startReview: (
+    req: ReviewRequest
+  ) => Promise<{ success: boolean; commitSha?: string; error?: string }>;
   abortReview: () => Promise<{ success: boolean }>;
   getHistory: () => Promise<HistoryEntry[]>;
   getReports: (commitSha: string) => Promise<ReviewReport[]>;

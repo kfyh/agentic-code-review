@@ -37,7 +37,14 @@ export class StagingService {
 
     log(`[STAGING] Copying workspace files (excluding .git/ and CLAUDE.md)...`);
     const stagingBaseName = path.basename(getStagingBaseDir());
-    this.copyDirectoryExcluding(workspaceDir, stagedDir, ['.git', 'CLAUDE.md', 'staging', 'staged', '.agentic-code-review', stagingBaseName]);
+    this.copyDirectoryExcluding(workspaceDir, stagedDir, [
+      '.git',
+      'CLAUDE.md',
+      'staging',
+      'staged',
+      '.agentic-code-review',
+      stagingBaseName,
+    ]);
 
     // Create reports directory if it doesn't exist yet
     const reportsDir = path.join(stagedDir, 'reports');
@@ -81,7 +88,7 @@ export class StagingService {
       } else if (entry.isFile() || entry.isSymbolicLink()) {
         try {
           fs.copyFileSync(srcPath, destPath);
-        } catch (err) {
+        } catch {
           // Fallback or ignore unreadable files
         }
       }

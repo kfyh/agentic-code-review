@@ -8,7 +8,10 @@ describe('HistoryService', () => {
   let historyService: HistoryService;
 
   beforeEach(() => {
-    testHistoryPath = path.join(os.tmpdir(), `jest_history_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
+    testHistoryPath = path.join(
+      os.tmpdir(),
+      `jest_history_${Date.now()}_${Math.random().toString(36).substring(7)}.json`
+    );
     historyService = new HistoryService(testHistoryPath);
   });
 
@@ -16,10 +19,41 @@ describe('HistoryService', () => {
     if (fs.existsSync(testHistoryPath)) {
       fs.rmSync(testHistoryPath, { force: true });
     }
+    jest.restoreAllMocks();
   });
 
   test('returns empty array when history file does not exist', () => {
     expect(historyService.getHistory()).toEqual([]);
+  });
+
+  test('returns empty array when default constructor is called', () => {
+    const defaultSvc = new HistoryService();
+    expect(Array.isArray(defaultSvc.getHistory())).toBe(true);
+  });
+
+  test('returns empty array when JSON is not an array', () => {
+    fs.writeFileSync(testHistoryPath, '{"key": "value"}');
+    expect(historyService.getHistory()).toEqual([]);
+  });
+
+  test('returns empty array when reading file fails', () => {
+    fs.writeFileSync(testHistoryPath, 'invalid json {{{');
+    expect(historyService.getHistory()).toEqual([]);
+  });
+
+  test('handles directory creation and write errors gracefully', () => {
+    const nestedPath = path.join(os.tmpdir(), `nested_${Date.now()}`, 'history.json');
+    const nestedSvc = new HistoryService(nestedPath);
+
+    const res = nestedSvc.addOrUpdateHistory({
+      gitUrl: 'git@github.com:acme/backend.git',
+      lastBranch: 'dev',
+    });
+    expect(res.length).toBe(1);
+
+    if (fs.existsSync(nestedPath)) {
+      fs.rmSync(path.dirname(nestedPath), { recursive: true, force: true });
+    }
   });
 
   test('adds and stores history entries reverse-chronologically', () => {

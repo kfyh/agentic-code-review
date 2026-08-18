@@ -38,10 +38,12 @@ export class HistoryService {
    * Adds or updates a repository entry in history.
    * Keyed by unique gitUrl. Keeps max 30 entries, reverse-chronological.
    */
-  public addOrUpdateHistory(entry: Omit<HistoryEntry, 'lastReviewedAt'> & { lastReviewedAt?: string }): HistoryEntry[] {
+  public addOrUpdateHistory(
+    entry: Omit<HistoryEntry, 'lastReviewedAt'> & { lastReviewedAt?: string }
+  ): HistoryEntry[] {
     const current = this.getHistory();
     const now = entry.lastReviewedAt || new Date().toISOString();
-    
+
     // Remove any existing entry for this gitUrl (case-insensitive check)
     const filtered = current.filter(
       (item) => item.gitUrl.trim().toLowerCase() !== entry.gitUrl.trim().toLowerCase()

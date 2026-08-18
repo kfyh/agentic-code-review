@@ -39,10 +39,10 @@ export function getStagingBaseDir(): string {
   if (customStagingDir) {
     return customStagingDir;
   }
-  if (process.env.STAGING_DIR && process.env.STAGING_DIR.trim()) {
+  if (process.env.STAGING_DIR?.trim()) {
     return path.resolve(process.env.STAGING_DIR.trim());
   }
-  if (process.env.CODE_REVIEW_STAGING_DIR && process.env.CODE_REVIEW_STAGING_DIR.trim()) {
+  if (process.env.CODE_REVIEW_STAGING_DIR?.trim()) {
     return path.resolve(process.env.CODE_REVIEW_STAGING_DIR.trim());
   }
   // Default to hidden .agentic-code-review/staged folder in home directory

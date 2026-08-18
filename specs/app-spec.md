@@ -3,6 +3,7 @@
 ## Changelog
 
 ### 2026-08-15
+
 - **Subprocess Invocation Simplification**: Removed `-r spec` role argument from `run-agent` invocation. The runner is executed as `run-agent . -p "<prompt>"` with working directory set to the staged workspace (`cwd: stagedDir`). Omitting `-r spec` allows read-write access so the container agent can create and write report files directly to `<stagedDir>/reports/`.
 - **Storage Location**: Updated base app data and default staging directory location to `~/.agentic-code-review` (`~/.agentic-code-review/staged/`). The staging folder path remains configurable via settings, environment variables, or UI.
 
@@ -13,6 +14,7 @@
 This app builds on top of [agentflow](https://github.com/kfyh/agentflow), an existing multi-vendor agentic Docker framework that already implements the core sandbox, authentication, and prompt runner. agentflow is currently a personal project — Kevin is its only known user. The sandbox model, Docker images, guidelines system, and authentication patterns described here are derived from agentflow and should remain compatible with it.
 
 **The app's primary job** is to automate what is currently done manually before invoking `run-agent.sh`:
+
 - Checking out the repo(s) on the host
 - Preparing the workspace (stripping `.git/`, writing context metadata)
 - Selecting the right prompt and constructing the final invocation
@@ -37,6 +39,7 @@ Rationale: agentflow already works, is security-reviewed (this document), and ha
 **Known limitation accepted for Phase 1:** the app is not portable to other users without them separately setting up agentflow (cloning it, building the relevant engine image, authenticating). This is acceptable for a personal tool but blocks wider distribution.
 
 **Deferred to Phase 2 (trigger: someone other than Kevin wants to run this):**
+
 - Decide standalone vs. library-ified agentflow
 - Design dynamic provider detection (no hardcoded default engine)
 - Vendor or bundle Docker image definitions so a new user doesn't need a separate agentflow checkout
@@ -46,6 +49,7 @@ Rationale: agentflow already works, is security-reviewed (this document), and ha
 ## Current Workflows (Manual)
 
 ### Flow 1 — Single Branch Review
+
 ```bash
 # Manual today:
 git checkout <branch>
@@ -54,6 +58,7 @@ run-agent.sh -c claude /path/to/repo -p "$(cat prompts/code-review-prompt.txt)"
 ```
 
 ### Flow 2 — Diff Review (Branch vs Main)
+
 ```bash
 # Manual today:
 git checkout main   # → /parent/main/
@@ -68,6 +73,7 @@ Flow 2's prompt is currently ad hoc. Standardising it is a goal of this project.
 ## App Goal
 
 An Electron desktop app (TypeScript) that:
+
 1. Takes a repo URL and branch selection as input
 2. Performs git operations on the host (outside the sandbox)
 3. Prepares the workspace (staging)
@@ -82,26 +88,27 @@ It is not a reimplementation of agentflow — it is an orchestration layer on to
 
 Goal: protect the host laptop from root access or codebase corruption due to agentic execution. The company already trusts Claude as a model; jailbreaking is out of scope.
 
-| Threat | Mitigated? | Mechanism |
-|---|---|---|
-| LLM writes to codebase | Yes | `/workspace` mounted read-only in design/spec mode; sandboxed in coder mode |
-| LLM commits to git | Yes | `git` not installed in Docker image (intentional, documented in agentflow) |
-| LLM reads full git history | Yes | `.git/` excluded from staged workspace mount |
-| LLM gains root on host | Yes | `--cap-drop ALL`, non-root `node` user in container |
-| LLM makes unexpected outbound calls | Partial | Network required for tool installs (madge, ts-morph); mitigated by `--ignore-scripts` on LLM-triggered installs (see npm section) |
-| LLM exfiltrates credentials | Partial | Host credentials never reach the mount; OAuth token stored in Docker named volume, not env var |
-| File-based prompt injection | Low | Model-level; `CLAUDE.md` excluded from staged workspace |
-| Malicious npm postinstall | Low-Medium | See npm section; `--ignore-scripts` recommended |
-| Electron renderer XSS | Yes | `contextIsolation: true`, `nodeIntegration: false`, DOMPurify on LLM output |
+| Threat                              | Mitigated? | Mechanism                                                                                                                         |
+| ----------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| LLM writes to codebase              | Yes        | `/workspace` mounted read-only in design/spec mode; sandboxed in coder mode                                                       |
+| LLM commits to git                  | Yes        | `git` not installed in Docker image (intentional, documented in agentflow)                                                        |
+| LLM reads full git history          | Yes        | `.git/` excluded from staged workspace mount                                                                                      |
+| LLM gains root on host              | Yes        | `--cap-drop ALL`, non-root `node` user in container                                                                               |
+| LLM makes unexpected outbound calls | Partial    | Network required for tool installs (madge, ts-morph); mitigated by `--ignore-scripts` on LLM-triggered installs (see npm section) |
+| LLM exfiltrates credentials         | Partial    | Host credentials never reach the mount; OAuth token stored in Docker named volume, not env var                                    |
+| File-based prompt injection         | Low        | Model-level; `CLAUDE.md` excluded from staged workspace                                                                           |
+| Malicious npm postinstall           | Low-Medium | See npm section; `--ignore-scripts` recommended                                                                                   |
+| Electron renderer XSS               | Yes        | `contextIsolation: true`, `nodeIntegration: false`, DOMPurify on LLM output                                                       |
 
 ### Notes on Prompt Injection
 
 The main viable vector is a malicious instruction embedded in a file inside the repo (e.g. a comment, a `README.md`, or a `CLAUDE.md`). The LLM may follow instructions it reads from files even when they conflict with the system prompt — this is a known behaviour ("follow the prompt.md file" style attacks). Claude Code automatically reads `CLAUDE.md` from the working directory before the system prompt is applied, making it a particularly direct vector.
 
 Mitigations:
+
 - Exclude `CLAUDE.md` from the staged workspace (see Staging Prep)
 - Guidelines are appended to every prompt by the runner, establishing baseline constraints
-- The sandbox limits what a successfully injected instruction can actually *do*
+- The sandbox limits what a successfully injected instruction can actually _do_
 
 ---
 
@@ -199,6 +206,7 @@ API key mode: `ANTHROPIC_API_KEY` is passed as an env var (`-e ANTHROPIC_API_KEY
 Produces a temporary copy of the checked-out code for mounting into the container.
 
 **Excluded from staging copy:**
+
 ```
 .git/        # prevents raw git object/history reads; git binary not in image anyway
 CLAUDE.md    # Claude Code reads this automatically before system prompt; injection vector
@@ -207,6 +215,7 @@ CLAUDE.md    # Claude Code reads this automatically before system prompt; inject
 Host credentials (`.npmrc`, `.ssh`, `.gitconfig`, `.env`, etc.) exist only on the host and are never present in a repo checkout — no scrubbing required.
 
 **Process:**
+
 1. `rsync` repo → `staging/`, excluding `.git/` and `CLAUDE.md`
 2. Write `staging/context.json`: repo name, branch, commit SHA
 
@@ -235,11 +244,13 @@ The pattern:
 - **Microsoft dependency confusion campaign (May 2026)**: 33 packages profiled developer environments via postinstall ([Microsoft Security Blog](https://www.microsoft.com/en-us/security/blog/2026/05/29/33-malicious-npm-packages-abuse-dependency-confusion-profile-developer-environments/))
 
 In the context of this sandbox, a postinstall script triggered by a prompt-injected `npm install -g <malicious-pkg>` could:
+
 1. Read `/workspace` (mounted read-only but fully readable) and exfiltrate source code
 2. Read environment variables — which is why OAuth credentials should be stored in Docker volumes rather than passed as env vars
 3. Write a trojan binary to the npm global prefix that runs later in the same session
 
 **Mitigations:**
+
 1. **`npm install -g <pkg> --ignore-scripts`** for LLM-triggered installs. Breaks packages that genuinely need build steps (e.g. native bindings), but eliminates postinstall execution. Document this trade-off.
 2. **OAuth via named volume, not env var** — already the agentflow default. Ensures `process.env` contains no Anthropic credentials for a postinstall to steal.
 3. **Pre-bake common tools into the Docker image** — madge, ts-morph, dpdm, dependency-cruiser are known tools used by the review prompt. Installing them at image build time removes the need for live `npm install -g` during a session, eliminating the postinstall risk for the common case.
@@ -254,6 +265,7 @@ The Docker images are maintained in agentflow. The spec below documents the Clau
 ### Claude Image (from `agentflow/claude/Dockerfile`)
 
 Key properties:
+
 - Base: `node:20-bookworm-slim`
 - **`git` intentionally not installed**
 - Non-root user: `node`
@@ -277,13 +289,13 @@ Verify that `--network none` does not leak DNS queries in the Colima/WSL2 enviro
 
 ### Writable surfaces inside container
 
-| Path | Purpose | Notes |
-|---|---|---|
-| `/workspace` | Repo code | `ro` in spec/design role, `rw` in coder role |
-| `/home/node/.claude` | OAuth credentials | Named volume, persisted across runs |
-| `/home/node/.local` | Claude Code binary | Installed at image build time |
-| `/opt/venv` | Python packages | Pre-created, writable by `node` user |
-| `/tmp` | Scratch | Ephemeral |
+| Path                 | Purpose            | Notes                                        |
+| -------------------- | ------------------ | -------------------------------------------- |
+| `/workspace`         | Repo code          | `ro` in spec/design role, `rw` in coder role |
+| `/home/node/.claude` | OAuth credentials  | Named volume, persisted across runs          |
+| `/home/node/.local`  | Claude Code binary | Installed at image build time                |
+| `/opt/venv`          | Python packages    | Pre-created, writable by `node` user         |
+| `/tmp`               | Scratch            | Ephemeral                                    |
 
 ---
 
@@ -357,7 +369,9 @@ code-review-app/
 `agentInvoker.ts` is a thin wrapper: it assumes a working agentflow checkout exists on disk (path configured in app settings) and constructs the simplified runner invocation with no extra role arguments:
 
 ```ts
-spawn('/bin/bash', ['-i', '-c', `run-agent . -p ${escapeShellArg(promptContent)}`], { cwd: stagedDir });
+spawn('/bin/bash', ['-i', '-c', `run-agent . -p ${escapeShellArg(promptContent)}`], {
+  cwd: stagedDir,
+});
 ```
 
 This is the boundary that gets replaced in Phase 2 — everything else in the app (git ops, staging, prompt assembly, UI) should be written so it doesn't care how the invocation actually happens.
@@ -366,7 +380,7 @@ This is the boundary that gets replaced in Phase 2 — everything else in the ap
 
 Trigger: someone other than Kevin needs to run this app (see Phasing & Portability Decision above).
 
-Most likely shape: agentflow's core logic (image build, volume/auth handling, mount flag selection, prompt+guidelines assembly, docker invocation) is extracted into a package that agentflow's own CLI *and* this app both depend on, called via a function/API instead of a subprocess + string args. `runAgentInvoker.ts` is replaced by a direct call into that package — no shelling out, no CLI arg serialization, typed inputs/outputs.
+Most likely shape: agentflow's core logic (image build, volume/auth handling, mount flag selection, prompt+guidelines assembly, docker invocation) is extracted into a package that agentflow's own CLI _and_ this app both depend on, called via a function/API instead of a subprocess + string args. `runAgentInvoker.ts` is replaced by a direct call into that package — no shelling out, no CLI arg serialization, typed inputs/outputs.
 
 This also removes the CLI-args-as-command-line-prompts pattern entirely, and is the natural point to solve dynamic provider detection and drop the "must have a matching agentflow checkout" requirement.
 
@@ -384,6 +398,7 @@ Not yet decided: whether this becomes a published npm package, a git submodule, 
 ## Colima / Docker Engine Compatibility
 
 agentflow documents and supports:
+
 - **macOS**: Colima (avoids Docker Desktop commercial licensing for orgs > 250 employees or > $10M revenue)
 - **Windows**: WSL2 with native Docker Engine
 - **Linux**: Native Docker Engine
