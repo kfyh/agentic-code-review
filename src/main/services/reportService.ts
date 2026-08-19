@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { injectable, inject } from 'tsyringe';
 import { ReviewReport } from '../../shared/types';
 import { getStagedDir } from '../config';
+import { StdoutReportParser } from './stdoutReportParser';
 
 const IGNORED_MARKDOWN_FILES = new Set([
   'readme.md',
@@ -12,7 +14,12 @@ const IGNORED_MARKDOWN_FILES = new Set([
   'claude.md',
 ]);
 
+@injectable()
 export class ReportService {
+  constructor(
+    @inject(StdoutReportParser) private parser: StdoutReportParser = new StdoutReportParser()
+  ) {}
+
   /**
    * Scans and loads generated markdown reports from `<stagedDir>/reports/`, `<stagedDir>/output/`,
    * or root-level report files in `<stagedDir>/`.
@@ -47,47 +54,12 @@ export class ReportService {
     };
 
     try {
-      // 1. Primary: Scan <stagedDir>/reports/*.md
-      const reportsDir = path.join(stagedDir, 'reports');
-      if (fs.existsSync(reportsDir)) {
-        const files = fs.readdirSync(reportsDir).filter((f) => f.endsWith('.md'));
-        files.forEach((f) => addReportFromFile(path.join(reportsDir, f)));
-      }
+      this.scanDirectoryForReports(path.join(stagedDir, 'reports'), addReportFromFile);
+      this.scanDirectoryForReports(path.join(stagedDir, 'output'), addReportFromFile);
+      this.scanRootFilesForReports(stagedDir, addReportFromFile);
 
-      // 2. Secondary: Scan <stagedDir>/output/*.md
-      const outputDir = path.join(stagedDir, 'output');
-      if (fs.existsSync(outputDir)) {
-        const files = fs.readdirSync(outputDir).filter((f) => f.endsWith('.md'));
-        files.forEach((f) => addReportFromFile(path.join(outputDir, f)));
-      }
-
-      // 3. Fallback: Scan root <stagedDir>/*.md for code smell / report files
-      const rootFiles = fs.readdirSync(stagedDir).filter((f) => f.endsWith('.md'));
-      for (const file of rootFiles) {
-        const lower = file.toLowerCase();
-        if (lower.includes('code_smells') || lower.includes('report') || lower.includes('smells')) {
-          addReportFromFile(path.join(stagedDir, file));
-        }
-      }
-
-      // 4. Fallback: If no reports found on disk, search Podman rootless volumes & home brain directories
       if (reports.length === 0) {
-        const fifteenMinutesAgo = Date.now() - 15 * 60 * 1000;
-        const candidateSearchDirs = [
-          path.join(os.homedir(), '.local/share/containers/storage/volumes'),
-          path.join(os.homedir(), '.gemini/antigravity-cli/brain'),
-          path.join(os.homedir(), '.claude'),
-        ];
-
-        for (const searchDir of candidateSearchDirs) {
-          if (!fs.existsSync(searchDir)) continue;
-          try {
-            this.findRecentReportsRecursive(searchDir, fifteenMinutesAgo, addReportFromFile);
-            if (reports.length > 0) break;
-          } catch {
-            // Ignore permission or traversal errors
-          }
-        }
+        this.scanFallbackDirectories(addReportFromFile);
       }
 
       return reports;
@@ -107,65 +79,15 @@ export class ReportService {
     onLog?: (msg: string) => void
   ): boolean {
     const reportsDir = path.join(stagedDir, 'reports');
-    if (fs.existsSync(reportsDir)) {
-      try {
-        const existing = fs.readdirSync(reportsDir).filter((f) => {
-          if (!f.endsWith('.md')) return false;
-          try {
-            const stat = fs.statSync(path.join(reportsDir, f));
-            return stat.size > 10;
-          } catch {
-            return false;
-          }
-        });
-        if (existing.length > 0) {
-          return true;
-        }
-      } catch {
-        // Ignore directory read errors
-      }
+    if (this.hasNonEmptyReports(reportsDir)) {
+      return true;
     }
 
-    let startIndex = -1;
-    for (let i = 0; i < stdoutLines.length; i++) {
-      const line = stdoutLines[i].trim();
-      if (
-        line.startsWith('# Code Smell') ||
-        line.startsWith('# Code Review') ||
-        line.startsWith('# Deliverables') ||
-        line.startsWith('# Executive Summary') ||
-        line.startsWith('# 1. Executive Summary') ||
-        line.startsWith('# ')
-      ) {
-        startIndex = i;
-        break;
-      }
-    }
-
-    if (startIndex === -1) {
+    const reportText = this.parser.parseReportText(stdoutLines);
+    if (!reportText) {
       return false;
     }
 
-    const reportLines: string[] = [];
-    for (let i = startIndex; i < stdoutLines.length; i++) {
-      const line = stdoutLines[i];
-      if (
-        line.includes('🏁 Session Finished') ||
-        line.includes('📊 Usage:') ||
-        line.includes('❌ Session failed')
-      ) {
-        break;
-      }
-      if (!line.includes('🛠️ [Tool Use:')) {
-        reportLines.push(line);
-      }
-    }
-
-    if (reportLines.length === 0) {
-      return false;
-    }
-
-    const reportText = reportLines.join('\n').trim();
     if (!fs.existsSync(reportsDir)) {
       fs.mkdirSync(reportsDir, { recursive: true });
     }
@@ -178,6 +100,61 @@ export class ReportService {
       );
     }
     return true;
+  }
+
+  private scanDirectoryForReports(dir: string, addReportFn: (filePath: string) => void): void {
+    if (!fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
+    files.forEach((f) => addReportFn(path.join(dir, f)));
+  }
+
+  private scanRootFilesForReports(
+    stagedDir: string,
+    addReportFn: (filePath: string) => void
+  ): void {
+    const rootFiles = fs.readdirSync(stagedDir).filter((f) => f.endsWith('.md'));
+    for (const file of rootFiles) {
+      const lower = file.toLowerCase();
+      if (lower.includes('code_smells') || lower.includes('report') || lower.includes('smells')) {
+        addReportFn(path.join(stagedDir, file));
+      }
+    }
+  }
+
+  private scanFallbackDirectories(addReportFn: (filePath: string) => void): void {
+    const fifteenMinutesAgo = Date.now() - 15 * 60 * 1000;
+    const candidateSearchDirs = [
+      path.join(os.homedir(), '.local/share/containers/storage/volumes'),
+      path.join(os.homedir(), '.gemini/antigravity-cli/brain'),
+      path.join(os.homedir(), '.claude'),
+    ];
+
+    for (const searchDir of candidateSearchDirs) {
+      if (!fs.existsSync(searchDir)) continue;
+      try {
+        this.findRecentReportsRecursive(searchDir, fifteenMinutesAgo, addReportFn);
+      } catch {
+        // Ignore permission or traversal errors
+      }
+    }
+  }
+
+  private hasNonEmptyReports(reportsDir: string): boolean {
+    if (!fs.existsSync(reportsDir)) return false;
+    try {
+      const existing = fs.readdirSync(reportsDir).filter((f) => {
+        if (!f.endsWith('.md')) return false;
+        try {
+          const stat = fs.statSync(path.join(reportsDir, f));
+          return stat.size > 10;
+        } catch {
+          return false;
+        }
+      });
+      return existing.length > 0;
+    } catch {
+      return false;
+    }
   }
 
   private findRecentReportsRecursive(
@@ -211,5 +188,3 @@ export class ReportService {
     }
   }
 }
-
-export const reportService = new ReportService();

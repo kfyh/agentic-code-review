@@ -1,13 +1,12 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { IPC_CHANNELS, LogEntry, ReviewRequest, ReviewStateUpdate } from '../shared/types';
-import { agentInvoker } from './services/agentInvoker';
-import { gitService } from './services/gitService';
-import { historyService } from './services/historyService';
-import { reportService } from './services/reportService';
-import { reviewPipelineRunner } from './services/reviewPipelineRunner';
+import { ServiceContainer } from './services/container';
 import { getStagingBaseDir, setStagingDir } from './config';
 
-export function setupIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
+export function setupIpcHandlers(
+  services: ServiceContainer,
+  getMainWindow: () => BrowserWindow | null
+): void {
   const sendStateUpdate = (update: ReviewStateUpdate) => {
     const win = getMainWindow();
     if (win && !win.isDestroyed()) {
@@ -34,22 +33,22 @@ export function setupIpcHandlers(getMainWindow: () => BrowserWindow | null): voi
 
   // Remote default branch auto-detection
   ipcMain.handle(IPC_CHANNELS.DETECT_BRANCH, async (_, gitUrl: string) => {
-    return await gitService.detectRemoteDefaultBranch(gitUrl);
+    return await services.gitService.detectRemoteDefaultBranch(gitUrl);
   });
 
   // Get local persistent repo history
   ipcMain.handle(IPC_CHANNELS.GET_HISTORY, async () => {
-    return historyService.getHistory();
+    return services.historyService.getHistory();
   });
 
   // Get generated review reports
   ipcMain.handle(IPC_CHANNELS.GET_REPORTS, async (_, commitSha: string) => {
-    return await reportService.getReports(commitSha);
+    return await services.reportService.getReports(commitSha);
   });
 
   // Abort execution
   ipcMain.handle(IPC_CHANNELS.ABORT_REVIEW, async () => {
-    const success = agentInvoker.abortExecution();
+    const success = services.agentInvoker.abortExecution();
     if (success) {
       sendStateUpdate({ stage: 'aborted', error: 'User aborted execution' });
     }
@@ -58,6 +57,6 @@ export function setupIpcHandlers(getMainWindow: () => BrowserWindow | null): voi
 
   // Start code review orchestration pipeline
   ipcMain.handle(IPC_CHANNELS.START_REVIEW, async (_, req: ReviewRequest) => {
-    return await reviewPipelineRunner.executePipeline(req, sendStateUpdate, sendLogEntry);
+    return await services.reviewPipelineRunner.executePipeline(req, sendStateUpdate, sendLogEntry);
   });
 }

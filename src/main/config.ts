@@ -1,5 +1,6 @@
 import path from 'node:path';
 import os from 'node:os';
+import fs from 'node:fs';
 import { app } from 'electron';
 
 export function getUserDataDir(): string {
@@ -54,6 +55,38 @@ export function getStagedDir(commitSha: string): string {
 }
 
 export function getPromptFilePath(): string {
-  // Primary path in workspace root
+  const candidatePaths: string[] = [];
+
+  // 1. Electron process.resourcesPath (extraResources when packaged)
+  if (process.resourcesPath) {
+    candidatePaths.push(path.join(process.resourcesPath, 'code-review-prompt.md'));
+  }
+
+  // 2. Electron app.getAppPath() (bundled inside app.asar / app directory)
+  try {
+    if (app && typeof app.getAppPath === 'function') {
+      candidatePaths.push(path.join(app.getAppPath(), 'code-review-prompt.md'));
+    }
+  } catch {
+    // app not initialized
+  }
+
+  // 3. Current working directory (for CLI execution or dev mode)
+  candidatePaths.push(path.join(process.cwd(), 'code-review-prompt.md'));
+
+  // 4. User Data Directory (~/.agentic-code-review/code-review-prompt.md)
+  candidatePaths.push(path.join(getUserDataDir(), 'code-review-prompt.md'));
+
+  // Return the first candidate path that exists on disk
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Default fallback if file is not found anywhere
+  if (process.resourcesPath && app?.isPackaged) {
+    return path.join(process.resourcesPath, 'code-review-prompt.md');
+  }
   return path.join(process.cwd(), 'code-review-prompt.md');
 }

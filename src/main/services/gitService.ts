@@ -3,11 +3,14 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
+import { isError, isErrorWithMessage } from '../../shared/typeGuards';
 import { getGitCacheDir, getWorkspacesDir } from '../config';
 
 const execAsync = promisify(exec);
 
+@injectable()
 export class GitService {
   /**
    * Auto-detects the remote default branch using `git ls-remote --symref <gitUrl> HEAD`.
@@ -37,12 +40,13 @@ export class GitService {
         return { branch: match[1], isFallback: false };
       }
     } catch (err: unknown) {
-      const errorObj = err as { message?: string; stderr?: string };
-      console.warn(`Default branch query failed for ${cleanUrl}:`, errorObj?.message || err);
+      const message = isErrorWithMessage(err) ? err.message : String(err);
+      const stderr = isErrorWithMessage(err) && err.stderr ? err.stderr : undefined;
+      console.warn(`Default branch query failed for ${cleanUrl}:`, message);
       return {
         branch: 'main',
         isFallback: true,
-        error: errorObj?.stderr || errorObj?.message || 'Failed to detect remote default branch',
+        error: stderr || message || 'Failed to detect remote default branch',
       };
     }
 
@@ -110,9 +114,8 @@ export class GitService {
     try {
       await this.runGitCommand(`pull origin ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
     } catch (err: unknown) {
-      log(
-        `[GIT] Pull notice (using current head state): ${(err as Error)?.message || String(err)}`
-      );
+      const msg = isError(err) ? err.message : String(err);
+      log(`[GIT] Pull notice (using current head state): ${msg}`);
     }
 
     log(`[GIT] Resolving commit SHA...`);
@@ -184,5 +187,3 @@ export class GitService {
     return `'${arg.replace(/'/g, "'\\''")}'`;
   }
 }
-
-export const gitService = new GitService();

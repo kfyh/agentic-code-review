@@ -1,17 +1,20 @@
+import { injectable, inject } from 'tsyringe';
 import { LogEntry, ReviewRequest, ReviewStateUpdate } from '../../shared/types';
-import { agentInvoker, AgentInvoker } from './agentInvoker';
-import { gitService, GitService } from './gitService';
-import { historyService, HistoryService } from './historyService';
-import { installService, InstallService } from './installService';
-import { stagingService, StagingService } from './stagingService';
+import { isError } from '../../shared/typeGuards';
+import { AgentInvoker } from './agentInvoker';
+import { GitService } from './gitService';
+import { HistoryService } from './historyService';
+import { InstallService } from './installService';
+import { StagingService } from './stagingService';
 
+@injectable()
 export class ReviewPipelineRunner {
   constructor(
-    private gitSvc: GitService = gitService,
-    private historySvc: HistoryService = historyService,
-    private installSvc: InstallService = installService,
-    private stagingSvc: StagingService = stagingService,
-    private agentInv: AgentInvoker = agentInvoker
+    @inject(GitService) private gitSvc: GitService,
+    @inject(HistoryService) private historySvc: HistoryService,
+    @inject(InstallService) private installSvc: InstallService,
+    @inject(StagingService) private stagingSvc: StagingService,
+    @inject(AgentInvoker) private agentInv: AgentInvoker
   ) {}
 
   /**
@@ -32,65 +35,41 @@ export class ReviewPipelineRunner {
     }
 
     try {
-      // 1. Stage: Fetching & Git sync
-      onStateUpdate({ stage: 'fetching', branch });
-      onLogEntry({
-        timestamp: new Date().toISOString(),
-        source: 'app',
-        message: `Starting review pipeline for repository: ${gitUrl} (branch: ${branch})`,
-      });
-
-      const { commitSha, workspaceDir } = await this.gitSvc.prepareGitWorkspace(
+      // 1. Fetching & Git sync stage
+      const { commitSha, workspaceDir } = await this.runFetchStage(
         gitUrl,
         branch,
+        onStateUpdate,
         onLogEntry
       );
 
-      this.historySvc.addOrUpdateHistory({
-        gitUrl,
-        lastBranch: branch,
-        lastCommitSha: commitSha,
-      });
+      // 2. Host Dependency Installation stage
+      await this.runInstallStage(workspaceDir, branch, commitSha, onStateUpdate, onLogEntry);
 
-      // 2. Stage: Host Dependency Installation (npm install)
-      onStateUpdate({ stage: 'installing', branch, commitSha });
-      await this.installSvc.installDependencies(workspaceDir, onLogEntry);
-
-      // 3. Stage: Staging preparation
-      onStateUpdate({ stage: 'staging', branch, commitSha });
-      const { stagedDir } = this.stagingSvc.prepareStagingWorkspace(
+      // 3. Staging stage
+      const stagedDir = this.runStagingStage(
         workspaceDir,
         gitUrl,
         branch,
         commitSha,
+        onStateUpdate,
         onLogEntry
       );
 
-      // 4. Stage: Running agent
-      onStateUpdate({ stage: 'running', branch, commitSha });
-      const result = await this.agentInv.runAgent(stagedDir, onLogEntry);
+      // 4. Agent execution stage
+      const agentRes = await this.runAgentStage(
+        stagedDir,
+        branch,
+        commitSha,
+        onStateUpdate,
+        onLogEntry
+      );
 
-      if (result.aborted) {
-        onStateUpdate({
-          stage: 'aborted',
-          branch,
-          commitSha,
-          error: 'Review process aborted by user',
-        });
-        return { success: false, error: 'Aborted' };
+      if (!agentRes.success) {
+        return agentRes;
       }
 
-      if (!result.success) {
-        onStateUpdate({
-          stage: 'failed',
-          branch,
-          commitSha,
-          error: result.error || 'Agent execution failed',
-        });
-        return { success: false, error: result.error || 'Agent execution failed' };
-      }
-
-      // 5. Stage: Completed
+      // 5. Completion stage
       onStateUpdate({ stage: 'completed', branch, commitSha });
       onLogEntry({
         timestamp: new Date().toISOString(),
@@ -100,7 +79,7 @@ export class ReviewPipelineRunner {
 
       return { success: true, commitSha };
     } catch (err: unknown) {
-      const errorMessage = (err as Error)?.message || String(err);
+      const errorMessage = isError(err) ? err.message : String(err);
       onLogEntry({
         timestamp: new Date().toISOString(),
         source: 'stderr',
@@ -110,6 +89,95 @@ export class ReviewPipelineRunner {
       return { success: false, error: errorMessage };
     }
   }
-}
 
-export const reviewPipelineRunner = new ReviewPipelineRunner();
+  private async runFetchStage(
+    gitUrl: string,
+    branch: string,
+    onStateUpdate: (update: ReviewStateUpdate) => void,
+    onLogEntry: (log: LogEntry) => void
+  ): Promise<{ commitSha: string; workspaceDir: string }> {
+    onStateUpdate({ stage: 'fetching', branch });
+    onLogEntry({
+      timestamp: new Date().toISOString(),
+      source: 'app',
+      message: `Starting review pipeline for repository: ${gitUrl} (branch: ${branch})`,
+    });
+
+    const { commitSha, workspaceDir } = await this.gitSvc.prepareGitWorkspace(
+      gitUrl,
+      branch,
+      onLogEntry
+    );
+
+    this.historySvc.addOrUpdateHistory({
+      gitUrl,
+      lastBranch: branch,
+      lastCommitSha: commitSha,
+    });
+
+    return { commitSha, workspaceDir };
+  }
+
+  private async runInstallStage(
+    workspaceDir: string,
+    branch: string,
+    commitSha: string,
+    onStateUpdate: (update: ReviewStateUpdate) => void,
+    onLogEntry: (log: LogEntry) => void
+  ): Promise<void> {
+    onStateUpdate({ stage: 'installing', branch, commitSha });
+    await this.installSvc.installDependencies(workspaceDir, onLogEntry);
+  }
+
+  private runStagingStage(
+    workspaceDir: string,
+    gitUrl: string,
+    branch: string,
+    commitSha: string,
+    onStateUpdate: (update: ReviewStateUpdate) => void,
+    onLogEntry: (log: LogEntry) => void
+  ): string {
+    onStateUpdate({ stage: 'staging', branch, commitSha });
+    const { stagedDir } = this.stagingSvc.prepareStagingWorkspace(
+      workspaceDir,
+      gitUrl,
+      branch,
+      commitSha,
+      onLogEntry
+    );
+    return stagedDir;
+  }
+
+  private async runAgentStage(
+    stagedDir: string,
+    branch: string,
+    commitSha: string,
+    onStateUpdate: (update: ReviewStateUpdate) => void,
+    onLogEntry: (log: LogEntry) => void
+  ): Promise<{ success: boolean; error?: string }> {
+    onStateUpdate({ stage: 'running', branch, commitSha });
+    const result = await this.agentInv.runAgent(stagedDir, onLogEntry);
+
+    if (result.aborted) {
+      onStateUpdate({
+        stage: 'aborted',
+        branch,
+        commitSha,
+        error: 'Review process aborted by user',
+      });
+      return { success: false, error: 'Aborted' };
+    }
+
+    if (!result.success) {
+      onStateUpdate({
+        stage: 'failed',
+        branch,
+        commitSha,
+        error: result.error || 'Agent execution failed',
+      });
+      return { success: false, error: result.error || 'Agent execution failed' };
+    }
+
+    return { success: true };
+  }
+}

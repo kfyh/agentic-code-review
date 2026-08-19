@@ -1,15 +1,18 @@
+import 'reflect-metadata';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { stagingService } from '../src/main/services/stagingService';
+import { StagingService } from '../src/main/services/stagingService';
 import { setStagingDir } from '../src/main/config';
 
 describe('StagingService', () => {
+  let stagingService: StagingService;
   let mockWorkspaceDir: string;
   let customStagingBase: string;
   const mockCommitSha = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4';
 
   beforeEach(() => {
+    stagingService = new StagingService();
     mockWorkspaceDir = path.join(
       os.tmpdir(),
       `jest_workspace_${Date.now()}_${Math.random().toString(36).substring(7)}`

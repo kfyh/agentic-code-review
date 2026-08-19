@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC_CHANNELS, LogEntry, ReviewRequest, ReviewStateUpdate, WindowApi } from '../shared/types';
+import {
+  IPC_CHANNELS,
+  LogEntry,
+  ReviewRequest,
+  ReviewStateUpdate,
+  WindowApi,
+} from '../shared/types';
 
 const api: WindowApi = {
   detectBranch: (gitUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.DETECT_BRANCH, gitUrl),

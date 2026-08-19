@@ -2,10 +2,13 @@ import { exec } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import util from 'node:util';
+import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
+import { isErrorWithMessage } from '../../shared/typeGuards';
 
 const execAsync = util.promisify(exec);
 
+@injectable()
 export class InstallService {
   /**
    * Executes host-side `npm install` in the checked-out workspace directory
@@ -63,8 +66,7 @@ export class InstallService {
       log(`[INSTALL] Host dependency installation completed successfully.`, 'install');
       return { success: true, installed: true };
     } catch (err: unknown) {
-      const errorObj = err as { stderr?: string; message?: string };
-      const errMsg = errorObj?.stderr || errorObj?.message || String(err);
+      const errMsg = isErrorWithMessage(err) ? err.stderr || err.message : String(err);
       log(`[INSTALL WARNING] npm install failed or completed with warnings: ${errMsg}`, 'stderr');
       log(
         `[INSTALL NOTICE] Proceeding with staging so static analysis can analyze available source files.`,
@@ -74,5 +76,3 @@ export class InstallService {
     }
   }
 }
-
-export const installService = new InstallService();

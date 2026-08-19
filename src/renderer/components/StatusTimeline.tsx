@@ -10,6 +10,17 @@ interface StatusTimelineProps {
   onOpenReport?: () => void;
 }
 
+const STAGE_INDEX_MAP: Record<ReviewStage, number> = {
+  idle: -1,
+  fetching: 0,
+  installing: 0,
+  staging: 1,
+  running: 2,
+  completed: 3,
+  failed: 3,
+  aborted: 3,
+};
+
 export const StatusTimeline: React.FC<StatusTimelineProps> = ({
   stage,
   commitSha,
@@ -24,27 +35,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
     { key: 'completed', label: 'Review Complete' },
   ];
 
-  const getStageIndex = (currentStage: ReviewStage): number => {
-    switch (currentStage) {
-      case 'fetching':
-        return 0;
-      case 'installing':
-        return 0;
-      case 'staging':
-        return 1;
-      case 'running':
-        return 2;
-      case 'completed':
-        return 3;
-      case 'failed':
-      case 'aborted':
-        return 3;
-      default:
-        return -1;
-    }
-  };
-
-  const currentIndex = getStageIndex(stage);
+  const currentIndex = STAGE_INDEX_MAP[stage] ?? -1;
 
   const getStepStatus = (
     currentStage: ReviewStage,
