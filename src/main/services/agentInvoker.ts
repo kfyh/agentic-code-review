@@ -1,12 +1,17 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { injectable, inject } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
+import { isError } from '../../shared/typeGuards';
 import { getPromptFilePath } from '../config';
-import { reportService } from './reportService';
+import { ReportService } from './reportService';
 
+@injectable()
 export class AgentInvoker {
   private activeProcess: ChildProcess | null = null;
   private isAborted: boolean = false;
+
+  constructor(@inject(ReportService) private reportService: ReportService = new ReportService()) {}
 
   /**
    * Spawns `run-agent` subprocess to run code review prompt on the staged directory.
@@ -39,7 +44,7 @@ export class AgentInvoker {
     try {
       promptContent = fs.readFileSync(promptPath, 'utf-8');
     } catch (err: unknown) {
-      const msg = `Failed to read prompt file: ${(err as Error)?.message || String(err)}`;
+      const msg = `Failed to read prompt file: ${isError(err) ? err.message : String(err)}`;
       log(`[AGENT ERROR] ${msg}`, 'stderr');
       return { success: false, error: msg };
     }
@@ -101,7 +106,9 @@ export class AgentInvoker {
         }
 
         // Attempt stdout fallback report extraction if no files on disk
-        reportService.extractReportFromStdout(stdoutLines, stagedDir, (msg) => log(msg, 'agent'));
+        this.reportService.extractReportFromStdout(stdoutLines, stagedDir, (msg) =>
+          log(msg, 'agent')
+        );
 
         if (code === 0) {
           log(`[AGENT] Execution completed successfully (exit code 0).`, 'agent');
@@ -130,5 +137,3 @@ export class AgentInvoker {
     return `'${arg.replace(/'/g, "'\\''")}'`;
   }
 }
-
-export const agentInvoker = new AgentInvoker();

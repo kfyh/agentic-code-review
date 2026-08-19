@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { injectable } from 'tsyringe';
 import { HistoryEntry } from '../../shared/types';
 import { getHistoryFilePath } from '../config';
 
 const MAX_HISTORY_CAPACITY = 30;
 
+@injectable()
 export class HistoryService {
   private filePath: string;
 
@@ -71,5 +73,3 @@ export class HistoryService {
     return newHistory;
   }
 }
-
-export const historyService = new HistoryService();

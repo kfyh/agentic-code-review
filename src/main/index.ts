@@ -1,6 +1,8 @@
+import 'reflect-metadata';
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { setupIpcHandlers } from './ipc';
+import { createServiceContainer } from './services/container';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -20,7 +22,8 @@ function createWindow() {
     },
   });
 
-  setupIpcHandlers(() => mainWindow);
+  const services = createServiceContainer();
+  setupIpcHandlers(services, () => mainWindow);
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 

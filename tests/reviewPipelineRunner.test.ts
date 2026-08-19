@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { ReviewPipelineRunner } from '../src/main/services/reviewPipelineRunner';
 import { ReviewStateUpdate, LogEntry } from '../src/shared/types';
 import { GitService } from '../src/main/services/gitService';

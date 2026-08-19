@@ -1,5 +1,34 @@
 export * from './ipcChannels';
 
+// Branded domain types
+export type GitUrl = string & { readonly __brand: unique symbol };
+export type CommitSha = string & { readonly __brand: unique symbol };
+export type BranchName = string & { readonly __brand: unique symbol };
+
+export function makeGitUrl(url: string): GitUrl {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    throw new Error('Git URL cannot be empty');
+  }
+  return trimmed as GitUrl;
+}
+
+export function makeCommitSha(sha: string): CommitSha {
+  const trimmed = sha.trim();
+  if (!trimmed) {
+    throw new Error('Commit SHA cannot be empty');
+  }
+  return trimmed as CommitSha;
+}
+
+export function makeBranchName(branch: string): BranchName {
+  const trimmed = branch.trim();
+  if (!trimmed) {
+    throw new Error('Branch name cannot be empty');
+  }
+  return trimmed as BranchName;
+}
+
 export interface HistoryEntry {
   gitUrl: string;
   lastBranch: string;
@@ -41,19 +70,31 @@ export interface DetectBranchResult {
   error?: string;
 }
 
-export interface WindowApi {
-  detectBranch: (gitUrl: string) => Promise<DetectBranchResult>;
+// Segregated interfaces for Interface Segregation Principle (ISP)
+export interface HistoryApi {
+  getHistory: () => Promise<HistoryEntry[]>;
+}
+
+export interface ReportsApi {
+  getReports: (commitSha: string) => Promise<ReviewReport[]>;
+}
+
+export interface PipelineApi {
   startReview: (
     req: ReviewRequest
   ) => Promise<{ success: boolean; commitSha?: string; error?: string }>;
   abortReview: () => Promise<{ success: boolean }>;
-  getHistory: () => Promise<HistoryEntry[]>;
-  getReports: (commitSha: string) => Promise<ReviewReport[]>;
-  getStagingDir: () => Promise<string>;
-  setStagingDir: (dir: string) => Promise<{ success: boolean; stagingDir: string }>;
   onStateUpdate: (callback: (update: ReviewStateUpdate) => void) => () => void;
   onLogEntry: (callback: (log: LogEntry) => void) => () => void;
 }
+
+export interface ConfigApi {
+  detectBranch: (gitUrl: string) => Promise<DetectBranchResult>;
+  getStagingDir: () => Promise<string>;
+  setStagingDir: (dir: string) => Promise<{ success: boolean; stagingDir: string }>;
+}
+
+export interface WindowApi extends HistoryApi, ReportsApi, PipelineApi, ConfigApi {}
 
 declare global {
   interface Window {

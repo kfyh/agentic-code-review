@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
 import { getStagedDir, getStagingBaseDir } from '../config';
 
+@injectable()
 export class StagingService {
   /**
    * Prepares an isolated staging workspace for code review execution.
@@ -95,5 +97,3 @@ export class StagingService {
     }
   }
 }
-
-export const stagingService = new StagingService();
