@@ -59,12 +59,14 @@ export function getPromptFilePath(): string {
 
   // 1. Electron process.resourcesPath (extraResources when packaged)
   if (process.resourcesPath) {
+    candidatePaths.push(path.join(process.resourcesPath, 'src', 'prompts', 'code-review-prompt.md'));
     candidatePaths.push(path.join(process.resourcesPath, 'code-review-prompt.md'));
   }
 
   // 2. Electron app.getAppPath() (bundled inside app.asar / app directory)
   try {
     if (app && typeof app.getAppPath === 'function') {
+      candidatePaths.push(path.join(app.getAppPath(), 'src', 'prompts', 'code-review-prompt.md'));
       candidatePaths.push(path.join(app.getAppPath(), 'code-review-prompt.md'));
     }
   } catch {
@@ -72,9 +74,11 @@ export function getPromptFilePath(): string {
   }
 
   // 3. Current working directory (for CLI execution or dev mode)
+  candidatePaths.push(path.join(process.cwd(), 'src', 'prompts', 'code-review-prompt.md'));
   candidatePaths.push(path.join(process.cwd(), 'code-review-prompt.md'));
 
   // 4. User Data Directory (~/.agentic-code-review/code-review-prompt.md)
+  candidatePaths.push(path.join(getUserDataDir(), 'src', 'prompts', 'code-review-prompt.md'));
   candidatePaths.push(path.join(getUserDataDir(), 'code-review-prompt.md'));
 
   // Return the first candidate path that exists on disk
@@ -86,7 +90,41 @@ export function getPromptFilePath(): string {
 
   // Default fallback if file is not found anywhere
   if (process.resourcesPath && app?.isPackaged) {
-    return path.join(process.resourcesPath, 'code-review-prompt.md');
+    return path.join(process.resourcesPath, 'src', 'prompts', 'code-review-prompt.md');
   }
-  return path.join(process.cwd(), 'code-review-prompt.md');
+  return path.join(process.cwd(), 'src', 'prompts', 'code-review-prompt.md');
+}
+
+export function getDiffPromptFilePath(): string {
+  const candidatePaths: string[] = [];
+
+  if (process.resourcesPath) {
+    candidatePaths.push(path.join(process.resourcesPath, 'src', 'prompts', 'code-review-diff-prompt.md'));
+    candidatePaths.push(path.join(process.resourcesPath, 'code-review-diff-prompt.md'));
+  }
+
+  try {
+    if (app && typeof app.getAppPath === 'function') {
+      candidatePaths.push(path.join(app.getAppPath(), 'src', 'prompts', 'code-review-diff-prompt.md'));
+      candidatePaths.push(path.join(app.getAppPath(), 'code-review-diff-prompt.md'));
+    }
+  } catch {
+    // app not initialized
+  }
+
+  candidatePaths.push(path.join(process.cwd(), 'src', 'prompts', 'code-review-diff-prompt.md'));
+  candidatePaths.push(path.join(process.cwd(), 'code-review-diff-prompt.md'));
+  candidatePaths.push(path.join(getUserDataDir(), 'src', 'prompts', 'code-review-diff-prompt.md'));
+  candidatePaths.push(path.join(getUserDataDir(), 'code-review-diff-prompt.md'));
+
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  if (process.resourcesPath && app?.isPackaged) {
+    return path.join(process.resourcesPath, 'src', 'prompts', 'code-review-diff-prompt.md');
+  }
+  return path.join(process.cwd(), 'src', 'prompts', 'code-review-diff-prompt.md');
 }

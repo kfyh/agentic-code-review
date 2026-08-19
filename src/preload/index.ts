@@ -3,6 +3,7 @@ import {
   IPC_CHANNELS,
   LogEntry,
   ReviewRequest,
+  DiffReviewRequest,
   ReviewStateUpdate,
   WindowApi,
 } from '../shared/types';
@@ -10,6 +11,8 @@ import {
 const api: WindowApi = {
   detectBranch: (gitUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.DETECT_BRANCH, gitUrl),
   startReview: (req: ReviewRequest) => ipcRenderer.invoke(IPC_CHANNELS.START_REVIEW, req),
+  startDiffReview: (req: DiffReviewRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.START_DIFF_REVIEW, req),
   abortReview: () => ipcRenderer.invoke(IPC_CHANNELS.ABORT_REVIEW),
   getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),
   getReports: (commitSha: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_REPORTS, commitSha),

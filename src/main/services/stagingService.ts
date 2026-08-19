@@ -70,6 +70,91 @@ export class StagingService {
     return { stagedDir, contextJsonPath };
   }
 
+  /**
+   * Prepares an isolated parent staging workspace for Flow 2 diff review execution.
+   * Copies `base/`, `compare/`, `diff.patch`, excluding `.git/` and `CLAUDE.md`, and writes `context.json`.
+   */
+  public prepareDiffStagingWorkspace(
+    workspaceDir: string,
+    gitUrl: string,
+    baseBranch: string,
+    compareBranch: string,
+    changeSpec: string,
+    baseCommitSha: string,
+    compareCommitSha: string,
+    onLog?: (entry: LogEntry) => void
+  ): { stagedDir: string; contextJsonPath: string } {
+    const log = (message: string) => {
+      if (onLog) {
+        onLog({
+          timestamp: new Date().toISOString(),
+          source: 'staging',
+          message,
+        });
+      }
+    };
+
+    const stagedDir = getStagedDir(`diff-${compareCommitSha}`);
+    log(`[STAGING] Preparing diff staging directory at: ${stagedDir}`);
+
+    if (fs.existsSync(stagedDir)) {
+      log(`[STAGING] Cleaning pre-existing diff staging directory...`);
+      fs.rmSync(stagedDir, { recursive: true, force: true });
+    }
+
+    fs.mkdirSync(stagedDir, { recursive: true });
+
+    log(`[STAGING] Copying base and compare subtrees (excluding .git/ and CLAUDE.md)...`);
+    const exclusions = [
+      '.git',
+      'CLAUDE.md',
+      'staging',
+      'staged',
+      '.agentic-code-review',
+      path.basename(getStagingBaseDir()),
+    ];
+
+    const baseSrc = path.join(workspaceDir, 'base');
+    const compareSrc = path.join(workspaceDir, 'compare');
+    const diffPatchSrc = path.join(workspaceDir, 'diff.patch');
+
+    const baseDest = path.join(stagedDir, 'base');
+    const compareDest = path.join(stagedDir, 'compare');
+    const diffPatchDest = path.join(stagedDir, 'diff.patch');
+
+    fs.mkdirSync(baseDest, { recursive: true });
+    fs.mkdirSync(compareDest, { recursive: true });
+
+    this.copyDirectoryExcluding(baseSrc, baseDest, exclusions);
+    this.copyDirectoryExcluding(compareSrc, compareDest, exclusions);
+
+    if (fs.existsSync(diffPatchSrc)) {
+      fs.copyFileSync(diffPatchSrc, diffPatchDest);
+    }
+
+    const reportsDir = path.join(stagedDir, 'reports');
+    if (!fs.existsSync(reportsDir)) {
+      fs.mkdirSync(reportsDir, { recursive: true });
+    }
+
+    const contextJsonPath = path.join(stagedDir, 'context.json');
+    const contextData = {
+      repoUrl: gitUrl,
+      baseBranch,
+      baseCommitSha,
+      compareBranch,
+      compareCommitSha,
+      changeSpec,
+      stagedAt: new Date().toISOString(),
+    };
+
+    log(`[STAGING] Writing diff context metadata to context.json...`);
+    fs.writeFileSync(contextJsonPath, JSON.stringify(contextData, null, 2), 'utf-8');
+
+    log(`[STAGING] Diff workspace staging completed successfully.`);
+    return { stagedDir, contextJsonPath };
+  }
+
   private copyDirectoryExcluding(src: string, dest: string, exclusions: string[]): void {
     if (!fs.existsSync(src)) return;
 

@@ -18,7 +18,8 @@ export class AgentInvoker {
    */
   public async runAgent(
     stagedDir: string,
-    onLog?: (entry: LogEntry) => void
+    onLog?: (entry: LogEntry) => void,
+    customPromptContent?: string
   ): Promise<{ success: boolean; aborted?: boolean; error?: string }> {
     const log = (message: string, source: LogEntry['source'] = 'agent') => {
       if (onLog) {
@@ -31,22 +32,24 @@ export class AgentInvoker {
     };
 
     this.isAborted = false;
-    const promptPath = getPromptFilePath();
+    let promptContent = customPromptContent || '';
 
-    log(`[AGENT] Locating code review prompt at: ${promptPath}`);
-    if (!fs.existsSync(promptPath)) {
-      const err = `Prompt file not found at ${promptPath}`;
-      log(`[AGENT ERROR] ${err}`, 'stderr');
-      return { success: false, error: err };
-    }
+    if (!promptContent) {
+      const promptPath = getPromptFilePath();
+      log(`[AGENT] Locating code review prompt at: ${promptPath}`);
+      if (!fs.existsSync(promptPath)) {
+        const err = `Prompt file not found at ${promptPath}`;
+        log(`[AGENT ERROR] ${err}`, 'stderr');
+        return { success: false, error: err };
+      }
 
-    let promptContent = '';
-    try {
-      promptContent = fs.readFileSync(promptPath, 'utf-8');
-    } catch (err: unknown) {
-      const msg = `Failed to read prompt file: ${isError(err) ? err.message : String(err)}`;
-      log(`[AGENT ERROR] ${msg}`, 'stderr');
-      return { success: false, error: msg };
+      try {
+        promptContent = fs.readFileSync(promptPath, 'utf-8');
+      } catch (err: unknown) {
+        const msg = `Failed to read prompt file: ${isError(err) ? err.message : String(err)}`;
+        log(`[AGENT ERROR] ${msg}`, 'stderr');
+        return { success: false, error: msg };
+      }
     }
 
     log(`[AGENT] Shell environment check for 'run-agent'...`);

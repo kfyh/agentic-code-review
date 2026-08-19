@@ -5,16 +5,29 @@ import {
   ReviewReport,
   ReviewStage,
   ReviewStateUpdate,
+  ReviewMode,
 } from '../shared/types';
 import { LogConsole } from './components/LogConsole';
 import { RepoInputForm } from './components/RepoInputForm';
+import { DiffInputForm } from './components/DiffInputForm';
 import { ReportViewer } from './components/ReportViewer';
 import { StatusTimeline } from './components/StatusTimeline';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Code2, GitCompare } from 'lucide-react';
 
 export const App: React.FC = () => {
+  const [mode, setMode] = useState<ReviewMode>('single');
+
+  // Flow 1 state
   const [gitUrl, setGitUrl] = useState<string>('');
   const [branch, setBranch] = useState<string>('');
+
+  // Flow 2 state
+  const [diffGitUrl, setDiffGitUrl] = useState<string>('');
+  const [baseBranch, setBaseBranch] = useState<string>('');
+  const [compareBranch, setCompareBranch] = useState<string>('');
+  const [changeSpec, setChangeSpec] = useState<string>('');
+
+  // Shared execution & UI state
   const [stage, setStage] = useState<ReviewStage>('idle');
   const [commitSha, setCommitSha] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -39,6 +52,8 @@ export const App: React.FC = () => {
           if (items.length > 0) {
             setGitUrl((prev) => prev || items[0].gitUrl);
             setBranch((prev) => prev || items[0].lastBranch);
+            setDiffGitUrl((prev) => prev || items[0].gitUrl);
+            setCompareBranch((prev) => prev || items[0].lastBranch);
           }
         }
       } catch (err) {
@@ -54,7 +69,10 @@ export const App: React.FC = () => {
 
     const unsubscribeState = window.api.onStateUpdate((update: ReviewStateUpdate) => {
       setStage(update.stage);
-      if (update.branch) setBranch(update.branch);
+      if (update.branch) {
+        if (mode === 'single') setBranch(update.branch);
+        else setCompareBranch(update.branch);
+      }
       if (update.commitSha) setCommitSha(update.commitSha);
       if (update.error) setError(update.error);
 
@@ -76,7 +94,7 @@ export const App: React.FC = () => {
       unsubscribeState();
       unsubscribeLog();
     };
-  }, []);
+  }, [mode]);
 
   // Handle URL blur / history selection to detect remote default branch
   const handleUrlBlurOrSelect = async (url: string) => {
@@ -89,7 +107,11 @@ export const App: React.FC = () => {
       setIsDetectingBranch(false);
 
       if (res.success && res.branch) {
-        setBranch(res.branch);
+        if (mode === 'single') {
+          setBranch(res.branch);
+        } else {
+          setBaseBranch(res.branch);
+        }
         setDetectedBranchInfo({ isFallback: res.isFallback });
       } else {
         setDetectedBranchInfo({ isFallback: true, error: res.error });
@@ -103,7 +125,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Start review trigger
+  // Flow 1 Start review trigger
   const handleStartReview = async () => {
     if (!gitUrl.trim() || !branch.trim() || !window.api) return;
 
@@ -123,6 +145,34 @@ export const App: React.FC = () => {
     }
   };
 
+  // Flow 2 Start diff review trigger
+  const handleStartDiffReview = async () => {
+    if (
+      !diffGitUrl.trim() ||
+      !baseBranch.trim() ||
+      !compareBranch.trim() ||
+      !window.api
+    )
+      return;
+
+    setError(undefined);
+    setReports([]);
+    setLogs([]);
+    setShowReportModal(false);
+    setStage('fetching');
+
+    const res = await window.api.startDiffReview({
+      gitUrl: diffGitUrl.trim(),
+      baseBranch: baseBranch.trim(),
+      compareBranch: compareBranch.trim(),
+      changeSpec: changeSpec.trim(),
+    });
+
+    if (!res.success) {
+      setError(res.error || 'Failed to start diff review process');
+    }
+  };
+
   // Abort trigger
   const handleAbortReview = async () => {
     if (window.api) {
@@ -130,9 +180,15 @@ export const App: React.FC = () => {
     }
   };
 
+  const isReviewRunning =
+    stage === 'fetching' ||
+    stage === 'installing' ||
+    stage === 'staging' ||
+    stage === 'running';
+
   return (
     <div className="app-container">
-      {/* App Header */}
+      {/* App Header & Mode Switcher */}
       <header className="app-header">
         <div className="app-title-group">
           <div className="app-logo">
@@ -140,31 +196,71 @@ export const App: React.FC = () => {
           </div>
           <div>
             <h1 className="app-title">Code Review App</h1>
-            <p className="app-subtitle">Phase 1 Single Repository Automated Review Suite</p>
+            <p className="app-subtitle">
+              {mode === 'single'
+                ? 'Single Repository Automated Review Suite'
+                : 'PR & Branch Diff Review Suite against Change Spec'}
+            </p>
           </div>
+        </div>
+
+        {/* Mode Switcher Tabs */}
+        <div className="mode-switcher">
+          <button
+            type="button"
+            className={`mode-tab ${mode === 'single' ? 'active' : ''}`}
+            onClick={() => !isReviewRunning && setMode('single')}
+            disabled={isReviewRunning}
+          >
+            <Code2 size={16} />
+            <span>Single Repo Review</span>
+          </button>
+          <button
+            type="button"
+            className={`mode-tab ${mode === 'diff' ? 'active' : ''}`}
+            onClick={() => !isReviewRunning && setMode('diff')}
+            disabled={isReviewRunning}
+          >
+            <GitCompare size={16} />
+            <span>PR & Diff Review</span>
+          </button>
         </div>
       </header>
 
-      {/* Input Form */}
-      <RepoInputForm
-        gitUrl={gitUrl}
-        setGitUrl={setGitUrl}
-        branch={branch}
-        setBranch={setBranch}
-        history={history}
-        onStartReview={handleStartReview}
-        isDetectingBranch={isDetectingBranch}
-        isReviewRunning={
-          stage === 'fetching' ||
-          stage === 'installing' ||
-          stage === 'staging' ||
-          stage === 'running'
-        }
-        detectedBranchInfo={detectedBranchInfo}
-        onUrlBlurOrSelect={handleUrlBlurOrSelect}
-      />
+      {/* Input Form based on Active Mode */}
+      {mode === 'single' ? (
+        <RepoInputForm
+          gitUrl={gitUrl}
+          setGitUrl={setGitUrl}
+          branch={branch}
+          setBranch={setBranch}
+          history={history}
+          onStartReview={handleStartReview}
+          isDetectingBranch={isDetectingBranch}
+          isReviewRunning={isReviewRunning}
+          detectedBranchInfo={detectedBranchInfo}
+          onUrlBlurOrSelect={handleUrlBlurOrSelect}
+        />
+      ) : (
+        <DiffInputForm
+          gitUrl={diffGitUrl}
+          setGitUrl={setDiffGitUrl}
+          baseBranch={baseBranch}
+          setBaseBranch={setBaseBranch}
+          compareBranch={compareBranch}
+          setCompareBranch={setCompareBranch}
+          changeSpec={changeSpec}
+          setChangeSpec={setChangeSpec}
+          history={history}
+          onStartDiffReview={handleStartDiffReview}
+          isDetectingBranch={isDetectingBranch}
+          isReviewRunning={isReviewRunning}
+          detectedBranchInfo={detectedBranchInfo}
+          onUrlBlurOrSelect={handleUrlBlurOrSelect}
+        />
+      )}
 
-      {/* Pipeline Status Indicator */}
+      {/* Pipeline Status Indicator (Reused 1:1) */}
       <StatusTimeline
         stage={stage}
         commitSha={commitSha}
@@ -173,7 +269,7 @@ export const App: React.FC = () => {
         onOpenReport={() => setShowReportModal(true)}
       />
 
-      {/* Full Width Log Console */}
+      {/* Full Width Log Console (Reused 1:1) */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, width: '100%' }}>
         <LogConsole
           logs={logs}
@@ -183,7 +279,7 @@ export const App: React.FC = () => {
         />
       </div>
 
-      {/* Full-Screen Report Lightbox Modal */}
+      {/* Full-Screen Report Lightbox Modal (Reused 1:1) */}
       <ReportViewer
         reports={reports}
         isOpen={showReportModal}

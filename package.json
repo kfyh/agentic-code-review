@@ -25,10 +25,10 @@
     "files": [
       "dist/**/*",
       "package.json",
-      "code-review-prompt.md"
+      "src/prompts/**/*"
     ],
     "extraResources": [
-      "code-review-prompt.md"
+      "src/prompts/**/*"
     ],
     "directories": {
       "output": "release"

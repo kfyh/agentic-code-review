@@ -84,21 +84,23 @@ It is not a reimplementation of agentflow — it is an orchestration layer on to
 
 ---
 
-## Threat Model
+## Threat Model & Security Realities
 
-Goal: protect the host laptop from root access or codebase corruption due to agentic execution. The company already trusts Claude as a model; jailbreaking is out of scope.
+> [!NOTE]
+> **Network Access**: The agent operates with full outbound network access via the container host to install required analysis packages (`madge`, `ts-morph`) or fetch public dependencies. Protecting against data exfiltration is explicitly out of scope.
 
-| Threat                              | Mitigated? | Mechanism                                                                                                                         |
-| ----------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| LLM writes to codebase              | Yes        | `/workspace` mounted read-only in design/spec mode; sandboxed in coder mode                                                       |
-| LLM commits to git                  | Yes        | `git` not installed in Docker image (intentional, documented in agentflow)                                                        |
-| LLM reads full git history          | Yes        | `.git/` excluded from staged workspace mount                                                                                      |
-| LLM gains root on host              | Yes        | `--cap-drop ALL`, non-root `node` user in container                                                                               |
-| LLM makes unexpected outbound calls | Partial    | Network required for tool installs (madge, ts-morph); mitigated by `--ignore-scripts` on LLM-triggered installs (see npm section) |
-| LLM exfiltrates credentials         | Partial    | Host credentials never reach the mount; OAuth token stored in Docker named volume, not env var                                    |
-| File-based prompt injection         | Low        | Model-level; `CLAUDE.md` excluded from staged workspace                                                                           |
-| Malicious npm postinstall           | Low-Medium | See npm section; `--ignore-scripts` recommended                                                                                   |
-| Electron renderer XSS               | Yes        | `contextIsolation: true`, `nodeIntegration: false`, DOMPurify on LLM output                                                       |
+The threat model focuses primarily on **host integrity and source safety** rather than data exfiltration. The company already trusts Claude as a model; jailbreaking and exfiltration protection are out of scope.
+
+| Threat Vector                   | Mitigation Strategy                                                                                                                     |
+| :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------- |
+| **Host System Tampering**       | Agent runs inside non-root container (`node` user) with dropped capabilities (`--cap-drop ALL`, `--security-opt no-new-privileges`).   |
+| **Codebase Corruption**         | Workspace is mounted in an isolated staging copy (`~/.agentic-code-review/staged/<commitSha>`); host repo remains untouched.            |
+| **Unauthorised Git Commits**    | `git` binary is intentionally omitted from the container image, preventing unauthorised local or remote commits.                        |
+| **Git History Leakage**         | `.git/` directory is explicitly excluded during staging prep before mounting into the sandbox.                                          |
+| **File-Based Prompt Injection** | `CLAUDE.md` is stripped from the staged workspace to prevent instruction overriding; baseline constraints enforced by `guidelines.txt`. |
+| **Credential Safety**           | Host credentials never reach the mount; OAuth tokens reside in named container volumes (`agentic-coder-claude`), keeping credentials out of `process.env`. |
+| **Malicious npm Postinstall**   | `--ignore-scripts` recommended on LLM-triggered installs; pre-baking analysis tools into Docker image removes live install risks.      |
+| **Renderer XSS**                | UI runs with `contextIsolation: true`, `nodeIntegration: false`, and renders Markdown via `marked` + `DOMPurify`.                       |
 
 ### Notes on Prompt Injection
 

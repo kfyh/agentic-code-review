@@ -41,6 +41,15 @@ export interface ReviewRequest {
   branch: string;
 }
 
+export interface DiffReviewRequest {
+  gitUrl: string;
+  baseBranch: string;
+  compareBranch: string;
+  changeSpec: string;
+}
+
+export type ReviewMode = 'single' | 'diff';
+
 export type ReviewStage =
   'idle' | 'fetching' | 'installing' | 'staging' | 'running' | 'completed' | 'failed' | 'aborted';
 
@@ -82,6 +91,9 @@ export interface ReportsApi {
 export interface PipelineApi {
   startReview: (
     req: ReviewRequest
+  ) => Promise<{ success: boolean; commitSha?: string; error?: string }>;
+  startDiffReview: (
+    req: DiffReviewRequest
   ) => Promise<{ success: boolean; commitSha?: string; error?: string }>;
   abortReview: () => Promise<{ success: boolean }>;
   onStateUpdate: (callback: (update: ReviewStateUpdate) => void) => () => void;

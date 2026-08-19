@@ -1,5 +1,11 @@
 import { BrowserWindow, ipcMain } from 'electron';
-import { IPC_CHANNELS, LogEntry, ReviewRequest, ReviewStateUpdate } from '../shared/types';
+import {
+  IPC_CHANNELS,
+  LogEntry,
+  ReviewRequest,
+  DiffReviewRequest,
+  ReviewStateUpdate,
+} from '../shared/types';
 import { ServiceContainer } from './services/container';
 import { getStagingBaseDir, setStagingDir } from './config';
 
@@ -55,8 +61,17 @@ export function setupIpcHandlers(
     return { success };
   });
 
-  // Start code review orchestration pipeline
+  // Start single code review orchestration pipeline
   ipcMain.handle(IPC_CHANNELS.START_REVIEW, async (_, req: ReviewRequest) => {
     return await services.reviewPipelineRunner.executePipeline(req, sendStateUpdate, sendLogEntry);
+  });
+
+  // Start PR / diff review orchestration pipeline
+  ipcMain.handle(IPC_CHANNELS.START_DIFF_REVIEW, async (_, req: DiffReviewRequest) => {
+    return await services.reviewPipelineRunner.executeDiffPipeline(
+      req,
+      sendStateUpdate,
+      sendLogEntry
+    );
   });
 }

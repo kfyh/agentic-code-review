@@ -11,6 +11,7 @@ import {
   getGitCacheDir,
   getWorkspacesDir,
   getPromptFilePath,
+  getDiffPromptFilePath,
 } from '../src/main/config';
 
 describe('Config Module', () => {
@@ -80,21 +81,26 @@ describe('Config Module', () => {
     expect(getStagingBaseDir()).toBe('/env/code_review_staging');
   });
 
-  test('getPromptFilePath resolves existing code-review-prompt.md', () => {
+  test('getPromptFilePath resolves existing code-review-prompt.md in src/prompts/', () => {
     const promptPath = getPromptFilePath();
     expect(promptPath).toBeTruthy();
-    expect(promptPath.endsWith('code-review-prompt.md')).toBe(true);
+    expect(promptPath.endsWith('src/prompts/code-review-prompt.md')).toBe(true);
   });
 
   test('getPromptFilePath prefers process.resourcesPath if prompt file exists there', () => {
     const origResourcesPath = process.resourcesPath;
     try {
-      // Mock process.resourcesPath to point to current working dir where prompt exists
       (process as { resourcesPath?: string }).resourcesPath = process.cwd();
       const promptPath = getPromptFilePath();
-      expect(promptPath).toBe(path.join(process.cwd(), 'code-review-prompt.md'));
+      expect(promptPath).toBe(path.join(process.cwd(), 'src', 'prompts', 'code-review-prompt.md'));
     } finally {
       (process as { resourcesPath?: string }).resourcesPath = origResourcesPath;
     }
+  });
+
+  test('getDiffPromptFilePath resolves existing code-review-diff-prompt.md in src/prompts/', () => {
+    const diffPromptPath = getDiffPromptFilePath();
+    expect(diffPromptPath).toBeTruthy();
+    expect(diffPromptPath.endsWith('src/prompts/code-review-diff-prompt.md')).toBe(true);
   });
 });

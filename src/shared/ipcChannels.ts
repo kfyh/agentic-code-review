@@ -18,6 +18,7 @@ export const IPC_CHANNELS = {
 
   // Review execution pipeline
   START_REVIEW: 'review:start',
+  START_DIFF_REVIEW: 'review:start-diff',
   ABORT_REVIEW: 'review:abort',
 
   // Event channels (Main -> Renderer webContents streams)

@@ -145,6 +145,125 @@ export class GitService {
     return { commitSha, workspaceDir };
   }
 
+  /**
+   * Fetches base and compare branches, exports both subtrees, and generates host unified git diff patch.
+   */
+  public async prepareDiffGitWorkspace(
+    gitUrl: string,
+    baseBranch: string,
+    compareBranch: string,
+    onLog?: (entry: LogEntry) => void
+  ): Promise<{
+    baseCommitSha: string;
+    compareCommitSha: string;
+    workspaceDir: string;
+    diffPatchPath: string;
+  }> {
+    const log = (message: string, source: LogEntry['source'] = 'git') => {
+      if (onLog) {
+        onLog({
+          timestamp: new Date().toISOString(),
+          source,
+          message,
+        });
+      }
+    };
+
+    const cleanUrl = gitUrl.trim();
+    const cleanBase = baseBranch.trim();
+    const cleanCompare = compareBranch.trim();
+
+    const repoHash = crypto.createHash('md5').update(cleanUrl).digest('hex');
+    const cacheDir = path.join(getGitCacheDir(), repoHash);
+
+    if (!fs.existsSync(getGitCacheDir())) {
+      fs.mkdirSync(getGitCacheDir(), { recursive: true });
+    }
+
+    log(`[GIT DIFF] Target Repository: ${cleanUrl}`);
+    log(`[GIT DIFF] Base Branch: ${cleanBase} | Compare Branch: ${cleanCompare}`);
+
+    if (!fs.existsSync(cacheDir)) {
+      log(`[GIT DIFF] Cloning repository into cache (${cacheDir})...`);
+      await this.runGitCommand(
+        `clone ${this.escapeShellArg(cleanUrl)} ${this.escapeShellArg(cacheDir)}`,
+        undefined,
+        log
+      );
+    } else {
+      log(`[GIT DIFF] Fetching updates from origin...`);
+      await this.runGitCommand(`fetch origin`, cacheDir, log);
+    }
+
+    // Checkout and resolve base branch SHA
+    log(`[GIT DIFF] Resolving base branch (${cleanBase})...`);
+    await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBase)}`, cacheDir, log).catch(() => {});
+    await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBase)}`, cacheDir, log).catch(async () => {
+      await this.runGitCommand(
+        `checkout -B ${this.escapeShellArg(cleanBase)} origin/${this.escapeShellArg(cleanBase)}`,
+        cacheDir,
+        log
+      );
+    });
+    const baseSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
+
+    // Checkout and resolve compare branch SHA
+    log(`[GIT DIFF] Resolving compare branch (${cleanCompare})...`);
+    await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanCompare)}`, cacheDir, log).catch(() => {});
+    await this.runGitCommand(`checkout ${this.escapeShellArg(cleanCompare)}`, cacheDir, log).catch(async () => {
+      await this.runGitCommand(
+        `checkout -B ${this.escapeShellArg(cleanCompare)} origin/${this.escapeShellArg(cleanCompare)}`,
+        cacheDir,
+        log
+      );
+    });
+    const compareSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
+
+    log(`[GIT DIFF] Base SHA: ${baseSha} | Compare SHA: ${compareSha}`);
+
+    const workspaceDir = path.join(getWorkspacesDir(), `diff-${compareSha}`);
+    const baseDir = path.join(workspaceDir, 'base');
+    const compareDir = path.join(workspaceDir, 'compare');
+
+    if (fs.existsSync(workspaceDir)) {
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(baseDir, { recursive: true });
+    fs.mkdirSync(compareDir, { recursive: true });
+
+    log(`[GIT DIFF] Exporting base code (${baseSha}) to ${baseDir}...`);
+    await this.runGitCommand(
+      `archive ${baseSha} | (cd ${this.escapeShellArg(baseDir)} && tar -x)`,
+      cacheDir,
+      log
+    );
+
+    log(`[GIT DIFF] Exporting compare code (${compareSha}) to ${compareDir}...`);
+    await this.runGitCommand(
+      `archive ${compareSha} | (cd ${this.escapeShellArg(compareDir)} && tar -x)`,
+      cacheDir,
+      log
+    );
+
+    log(`[GIT DIFF] Generating git diff patch...`);
+    const diffPatchPath = path.join(workspaceDir, 'diff.patch');
+    const patchContent = await this.runGitCommand(
+      `diff ${baseSha} ${compareSha}`,
+      cacheDir,
+      log
+    );
+    fs.writeFileSync(diffPatchPath, patchContent, 'utf-8');
+
+    log(`[GIT DIFF] Diff patch saved to ${diffPatchPath} (${patchContent.length} bytes).`);
+
+    return {
+      baseCommitSha: baseSha,
+      compareCommitSha: compareSha,
+      workspaceDir,
+      diffPatchPath,
+    };
+  }
+
   private async runGitCommand(
     args: string,
     cwd?: string,

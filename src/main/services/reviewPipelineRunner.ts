@@ -1,6 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { injectable, inject } from 'tsyringe';
-import { LogEntry, ReviewRequest, ReviewStateUpdate } from '../../shared/types';
+import { DiffReviewRequest, LogEntry, ReviewRequest, ReviewStateUpdate } from '../../shared/types';
 import { isError } from '../../shared/typeGuards';
+import { getDiffPromptFilePath } from '../config';
 import { AgentInvoker } from './agentInvoker';
 import { GitService } from './gitService';
 import { HistoryService } from './historyService';
@@ -179,5 +182,108 @@ export class ReviewPipelineRunner {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Executes the Flow 2 PR / Branch Diff Review pipeline step-by-step.
+   */
+  public async executeDiffPipeline(
+    req: DiffReviewRequest,
+    onStateUpdate: (update: ReviewStateUpdate) => void,
+    onLogEntry: (log: LogEntry) => void
+  ): Promise<{ success: boolean; commitSha?: string; error?: string }> {
+    const { gitUrl, baseBranch, compareBranch, changeSpec } = req;
+
+    if (!gitUrl || !gitUrl.trim()) {
+      return { success: false, error: 'Git URL is required' };
+    }
+    if (!baseBranch || !baseBranch.trim()) {
+      return { success: false, error: 'Base branch name is required' };
+    }
+    if (!compareBranch || !compareBranch.trim()) {
+      return { success: false, error: 'Compare branch name is required' };
+    }
+
+    try {
+      // 1. Fetching & Git sync stage for base and compare branches
+      onStateUpdate({ stage: 'fetching', branch: compareBranch });
+      onLogEntry({
+        timestamp: new Date().toISOString(),
+        source: 'app',
+        message: `Starting diff review pipeline: ${gitUrl} (Base: ${baseBranch} vs Compare: ${compareBranch})`,
+      });
+
+      const { baseCommitSha, compareCommitSha, workspaceDir } =
+        await this.gitSvc.prepareDiffGitWorkspace(gitUrl, baseBranch, compareBranch, onLogEntry);
+
+      this.historySvc.addOrUpdateHistory({
+        gitUrl,
+        lastBranch: compareBranch,
+        lastCommitSha: compareCommitSha,
+      });
+
+      // 2. Host Dependency Installation stage on both base and compare workspaces
+      onStateUpdate({ stage: 'installing', branch: compareBranch, commitSha: compareCommitSha });
+      const baseDir = path.join(workspaceDir, 'base');
+      const compareDir = path.join(workspaceDir, 'compare');
+      await this.installSvc.installDependencies(baseDir, onLogEntry);
+      await this.installSvc.installDependencies(compareDir, onLogEntry);
+
+      // 3. Staging stage
+      onStateUpdate({ stage: 'staging', branch: compareBranch, commitSha: compareCommitSha });
+      const { stagedDir } = this.stagingSvc.prepareDiffStagingWorkspace(
+        workspaceDir,
+        gitUrl,
+        baseBranch,
+        compareBranch,
+        changeSpec || '',
+        baseCommitSha,
+        compareCommitSha,
+        onLogEntry
+      );
+
+      // 4. Load & Merge Diff Prompt
+      const diffPromptPath = getDiffPromptFilePath();
+      let promptTemplate = '';
+      if (fs.existsSync(diffPromptPath)) {
+        promptTemplate = fs.readFileSync(diffPromptPath, 'utf-8');
+      } else {
+        promptTemplate = `# PR & Diff Code Review\n\nTarget Change Specification:\n\n{{CHANGE_SPEC}}\n`;
+      }
+
+      const mergedPrompt = promptTemplate.replace(
+        '{{CHANGE_SPEC}}',
+        changeSpec && changeSpec.trim()
+          ? changeSpec.trim()
+          : 'No explicit Change Specification provided. Conduct a general PR diff code review.'
+      );
+
+      // 5. Agent execution stage
+      onStateUpdate({ stage: 'running', branch: compareBranch, commitSha: compareCommitSha });
+      const agentRes = await this.agentInv.runAgent(stagedDir, onLogEntry, mergedPrompt);
+
+      if (!agentRes.success) {
+        return agentRes;
+      }
+
+      // 6. Completion stage
+      onStateUpdate({ stage: 'completed', branch: compareBranch, commitSha: compareCommitSha });
+      onLogEntry({
+        timestamp: new Date().toISOString(),
+        source: 'app',
+        message: `Diff review completed successfully for SHA: ${compareCommitSha}`,
+      });
+
+      return { success: true, commitSha: compareCommitSha };
+    } catch (err: unknown) {
+      const errorMessage = isError(err) ? err.message : String(err);
+      onLogEntry({
+        timestamp: new Date().toISOString(),
+        source: 'stderr',
+        message: `[DIFF PIPELINE ERROR] ${errorMessage}`,
+      });
+      onStateUpdate({ stage: 'failed', branch: compareBranch, error: errorMessage });
+      return { success: false, error: errorMessage };
+    }
   }
 }
