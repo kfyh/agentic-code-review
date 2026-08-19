@@ -15,7 +15,7 @@ This prompt targets **one package at a time**. If working inside a monorepo, do 
 - **DO NOT** run `npm run`, `npm test`, or compile/build the project.
 - **DO NOT** run any `git` commands.
 - **DO NOT** scan across package boundaries during file-level analysis — this causes timeouts.
-- **MUST WRITE TO ABSOLUTE PATH /workspace/reports/**: You MUST write all report deliverables to the exact absolute path `/workspace/reports/code_smells.md` (or `/workspace/reports/<package_name>_code_smells.md`). DO NOT use relative paths, DO NOT use artifact directories (`/home/node/.gemini/antigravity-cli/brain/`), and DO NOT write to `/home/node/` or any path outside `/workspace`. Only `/workspace` is mounted to the host machine — any file written outside `/workspace` will be lost and inaccessible.
+- **MUST WRITE TO ABSOLUTE PATH /workspace/reports/**: You MUST write all report deliverables to the exact absolute path `/workspace/reports/review.md` (or `/workspace/reports/<package_name>_review.md`). DO NOT use relative paths, DO NOT use artifact directories (`/home/node/.gemini/antigravity-cli/brain/`), and DO NOT write to `/home/node/` or any path outside `/workspace`. Only `/workspace` is mounted to the host machine — any file written outside `/workspace` will be lost and inaccessible.
 - **YOU MUST** write and execute custom static analysis scripts for every structural or graph-based finding (dependency cycles, complexity scores, import maps). Never derive these from reading code tokens alone — scripted analysis is mandatory, not optional.
 - If a script times out or errors, record partial results and move on to the next package rather than retrying or expanding scope.
 - Restrict yourself to reading files, writing and executing your analysis scripts, and writing the final report under `/workspace/reports/`.
@@ -88,7 +88,7 @@ Prefer utilizing established, well-known libraries and tools rather than writing
 ## Deliverables
 
 Ensure the `reports/` directory is created in `/workspace` before writing reports (`mkdir -p /workspace/reports`).
-Produce reports strictly under `/workspace/reports/` using the path format `/workspace/reports/<package_name>_code_smells.md` (or `/workspace/reports/code_smells.md` for single-package repositories). Write and flush each report immediately upon completing analysis for that package.
+Produce reports strictly under `/workspace/reports/` using the path format `/workspace/reports/<package_name>_review.md` (or `/workspace/reports/review.md` for single-package repositories). Write and flush each report immediately upon completing analysis for that package.
 Writing to `/home/node/` or `.gemini/` home directory paths is strictly forbidden as those paths are unmounted and inaccessible to the user.
 
 Each report must include:

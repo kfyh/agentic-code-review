@@ -54,6 +54,58 @@ export function getStagedDir(commitSha: string): string {
   return path.join(getStagingBaseDir(), commitSha);
 }
 
+/**
+ * Safely removes a directory recursively, bypassing Electron's virtual asar interception.
+ * Prevents ENOTDIR errors when encountering default_app.asar or packages with embedded asar archives.
+ */
+export function safeRemoveDirectorySync(dirPath: string): void {
+  if (!fs.existsSync(dirPath)) return;
+  const prevNoAsar = (process as unknown as { noAsar?: boolean }).noAsar;
+  try {
+    (process as unknown as { noAsar?: boolean }).noAsar = true;
+    fs.rmSync(dirPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch {
+    try {
+      (process as unknown as { noAsar?: boolean }).noAsar = true;
+      manualRemoveRecursive(dirPath);
+    } catch {
+      // Ignore fallback deletion error
+    }
+  } finally {
+    (process as unknown as { noAsar?: boolean }).noAsar = prevNoAsar;
+  }
+}
+
+function manualRemoveRecursive(targetPath: string): void {
+  if (!fs.existsSync(targetPath)) return;
+  const prevNoAsar = (process as unknown as { noAsar?: boolean }).noAsar;
+  try {
+    (process as unknown as { noAsar?: boolean }).noAsar = true;
+    const stat = fs.lstatSync(targetPath);
+    if (stat.isDirectory()) {
+      const files = fs.readdirSync(targetPath);
+      for (const file of files) {
+        manualRemoveRecursive(path.join(targetPath, file));
+      }
+      try {
+        fs.rmdirSync(targetPath);
+      } catch {
+        // Ignore
+      }
+    } else {
+      try {
+        fs.unlinkSync(targetPath);
+      } catch {
+        // Ignore
+      }
+    }
+  } catch {
+    // Ignore
+  } finally {
+    (process as unknown as { noAsar?: boolean }).noAsar = prevNoAsar;
+  }
+}
+
 export function getPromptFilePath(): string {
   const candidatePaths: string[] = [];
 

@@ -42,6 +42,11 @@ export function setupIpcHandlers(
     return await services.gitService.detectRemoteDefaultBranch(gitUrl);
   });
 
+  // Get remote branches list
+  ipcMain.handle(IPC_CHANNELS.GET_BRANCHES, async (_, gitUrl: string) => {
+    return await services.gitService.getRemoteBranches(gitUrl);
+  });
+
   // Get local persistent repo history
   ipcMain.handle(IPC_CHANNELS.GET_HISTORY, async () => {
     return services.historyService.getHistory();

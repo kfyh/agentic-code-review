@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
-import { getStagedDir, getStagingBaseDir } from '../config';
+import { getStagedDir, getStagingBaseDir, safeRemoveDirectorySync } from '../config';
 
 @injectable()
 export class StagingService {
@@ -32,7 +32,7 @@ export class StagingService {
 
     if (fs.existsSync(stagedDir)) {
       log(`[STAGING] Cleaning pre-existing staging directory...`);
-      fs.rmSync(stagedDir, { recursive: true, force: true });
+      safeRemoveDirectorySync(stagedDir);
     }
 
     fs.mkdirSync(stagedDir, { recursive: true });
@@ -99,7 +99,7 @@ export class StagingService {
 
     if (fs.existsSync(stagedDir)) {
       log(`[STAGING] Cleaning pre-existing diff staging directory...`);
-      fs.rmSync(stagedDir, { recursive: true, force: true });
+      safeRemoveDirectorySync(stagedDir);
     }
 
     fs.mkdirSync(stagedDir, { recursive: true });
@@ -158,27 +158,33 @@ export class StagingService {
   private copyDirectoryExcluding(src: string, dest: string, exclusions: string[]): void {
     if (!fs.existsSync(src)) return;
 
-    const entries = fs.readdirSync(src, { withFileTypes: true });
+    const prevNoAsar = (process as unknown as { noAsar?: boolean }).noAsar;
+    try {
+      (process as unknown as { noAsar?: boolean }).noAsar = true;
+      const entries = fs.readdirSync(src, { withFileTypes: true });
 
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
 
-      // Check exclusions (matches exact name e.g. .git or CLAUDE.md)
-      if (exclusions.includes(entry.name)) {
-        continue;
-      }
+        // Check exclusions (matches exact name e.g. .git or CLAUDE.md)
+        if (exclusions.includes(entry.name)) {
+          continue;
+        }
 
-      if (entry.isDirectory()) {
-        fs.mkdirSync(destPath, { recursive: true });
-        this.copyDirectoryExcluding(srcPath, destPath, exclusions);
-      } else if (entry.isFile() || entry.isSymbolicLink()) {
-        try {
-          fs.copyFileSync(srcPath, destPath);
-        } catch {
-          // Fallback or ignore unreadable files
+        if (entry.isDirectory()) {
+          fs.mkdirSync(destPath, { recursive: true });
+          this.copyDirectoryExcluding(srcPath, destPath, exclusions);
+        } else if (entry.isFile() || entry.isSymbolicLink()) {
+          try {
+            fs.copyFileSync(srcPath, destPath);
+          } catch {
+            // Fallback or ignore unreadable files
+          }
         }
       }
+    } finally {
+      (process as unknown as { noAsar?: boolean }).noAsar = prevNoAsar;
     }
   }
 }

@@ -79,6 +79,12 @@ export interface DetectBranchResult {
   error?: string;
 }
 
+export interface GetBranchesResult {
+  success: boolean;
+  branches: string[];
+  error?: string;
+}
+
 // Segregated interfaces for Interface Segregation Principle (ISP)
 export interface HistoryApi {
   getHistory: () => Promise<HistoryEntry[]>;
@@ -102,6 +108,7 @@ export interface PipelineApi {
 
 export interface ConfigApi {
   detectBranch: (gitUrl: string) => Promise<DetectBranchResult>;
+  getBranches: (gitUrl: string) => Promise<GetBranchesResult>;
   getStagingDir: () => Promise<string>;
   setStagingDir: (dir: string) => Promise<{ success: boolean; stagingDir: string }>;
 }

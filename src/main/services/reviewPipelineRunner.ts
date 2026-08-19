@@ -262,8 +262,24 @@ export class ReviewPipelineRunner {
       onStateUpdate({ stage: 'running', branch: compareBranch, commitSha: compareCommitSha });
       const agentRes = await this.agentInv.runAgent(stagedDir, onLogEntry, mergedPrompt);
 
+      if (agentRes.aborted) {
+        onStateUpdate({
+          stage: 'aborted',
+          branch: compareBranch,
+          commitSha: compareCommitSha,
+          error: 'Review process aborted by user',
+        });
+        return { success: false, error: 'Aborted' };
+      }
+
       if (!agentRes.success) {
-        return agentRes;
+        onStateUpdate({
+          stage: 'failed',
+          branch: compareBranch,
+          commitSha: compareCommitSha,
+          error: agentRes.error || 'Agent execution failed',
+        });
+        return { success: false, error: agentRes.error || 'Agent execution failed' };
       }
 
       // 6. Completion stage

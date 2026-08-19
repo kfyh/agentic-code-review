@@ -6,14 +6,87 @@ import { promisify } from 'node:util';
 import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
 import { isError, isErrorWithMessage } from '../../shared/typeGuards';
-import { getGitCacheDir, getWorkspacesDir } from '../config';
+import { getGitCacheDir, getWorkspacesDir, safeRemoveDirectorySync } from '../config';
 
 const execAsync = promisify(exec);
 
 @injectable()
 export class GitService {
   /**
-   * Auto-detects the remote default branch using `git ls-remote --symref <gitUrl> HEAD`.
+   * Fetches all remote branches using `git ls-remote --heads <gitUrl>`.
+   */
+  public async getRemoteBranches(
+    gitUrl: string
+  ): Promise<{ success: boolean; branches: string[]; error?: string }> {
+    if (!gitUrl || !gitUrl.trim()) {
+      return { success: false, branches: [], error: 'Empty Git URL provided' };
+    }
+
+    const cleanUrl = gitUrl.trim();
+
+    try {
+      const { stdout } = await execAsync(
+        `git ls-remote --heads ${this.escapeShellArg(cleanUrl)}`,
+        {
+          timeout: 10000,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        }
+      );
+
+      const branches: string[] = [];
+      const lines = stdout.split('\n');
+      for (const line of lines) {
+        const match = line.match(/[0-9a-f]+\s+refs\/heads\/(.+)$/i);
+        if (match && match[1]) {
+          const branchName = match[1].trim();
+          if (branchName && !branches.includes(branchName)) {
+            branches.push(branchName);
+          }
+        }
+      }
+
+      // Sort: main/master first, then alphabetical
+      branches.sort((a, b) => {
+        if (a === 'main' || a === 'master') return -1;
+        if (b === 'main' || b === 'master') return 1;
+        return a.localeCompare(b);
+      });
+
+      return { success: true, branches };
+    } catch (err: unknown) {
+      const message = isErrorWithMessage(err) ? err.message : String(err);
+      console.warn(`Remote branch list query failed for ${cleanUrl}:`, message);
+
+      // Check if local cache dir exists and try local git branch -r
+      const repoHash = crypto.createHash('md5').update(cleanUrl).digest('hex');
+      const cacheDir = path.join(getGitCacheDir(), repoHash);
+
+      if (fs.existsSync(cacheDir)) {
+        try {
+          const { stdout: cachedStdout } = await execAsync(`git branch -r`, { cwd: cacheDir });
+          const cachedBranches: string[] = [];
+          const lines = cachedStdout.split('\n');
+          for (const line of lines) {
+            const clean = line.trim().replace(/^origin\//, '');
+            if (clean && !clean.includes('->') && !cachedBranches.includes(clean)) {
+              cachedBranches.push(clean);
+            }
+          }
+          if (cachedBranches.length > 0) {
+            return { success: true, branches: cachedBranches };
+          }
+        } catch {
+          // ignore cache fallback error
+        }
+      }
+
+      return { success: false, branches: [], error: message };
+    }
+  }
+
+  /**
+   * Auto-detects the remote default branch using `git ls-remote --symref <gitUrl> HEAD`
+   * with fallback to querying remote heads.
    */
   public async detectRemoteDefaultBranch(
     gitUrl: string
@@ -25,7 +98,7 @@ export class GitService {
     const cleanUrl = gitUrl.trim();
 
     try {
-      // 10 second timeout for remote lookup
+      // 1. Try --symref lookup
       const { stdout } = await execAsync(
         `git ls-remote --symref ${this.escapeShellArg(cleanUrl)} HEAD`,
         {
@@ -34,23 +107,31 @@ export class GitService {
         }
       );
 
-      // Parse ref: refs/heads/<branch>
       const match = stdout.match(/ref:\s+refs\/heads\/([^\s]+)\s+HEAD/);
       if (match && match[1]) {
         return { branch: match[1], isFallback: false };
       }
-    } catch (err: unknown) {
-      const message = isErrorWithMessage(err) ? err.message : String(err);
-      const stderr = isErrorWithMessage(err) && err.stderr ? err.stderr : undefined;
-      console.warn(`Default branch query failed for ${cleanUrl}:`, message);
-      return {
-        branch: 'main',
-        isFallback: true,
-        error: stderr || message || 'Failed to detect remote default branch',
-      };
+    } catch {
+      // Ignore symref failure and proceed to heads fallback
     }
 
-    return { branch: 'main', isFallback: true };
+    // 2. Fallback to listing remote heads
+    const headsResult = await this.getRemoteBranches(cleanUrl);
+    if (headsResult.success && headsResult.branches.length > 0) {
+      if (headsResult.branches.includes('main')) {
+        return { branch: 'main', isFallback: false };
+      }
+      if (headsResult.branches.includes('master')) {
+        return { branch: 'master', isFallback: false };
+      }
+      return { branch: headsResult.branches[0], isFallback: false };
+    }
+
+    return {
+      branch: 'main',
+      isFallback: true,
+      error: headsResult.error || 'Failed to detect remote default branch',
+    };
   }
 
   /**
@@ -226,7 +307,7 @@ export class GitService {
     const compareDir = path.join(workspaceDir, 'compare');
 
     if (fs.existsSync(workspaceDir)) {
-      fs.rmSync(workspaceDir, { recursive: true, force: true });
+      safeRemoveDirectorySync(workspaceDir);
     }
     fs.mkdirSync(baseDir, { recursive: true });
     fs.mkdirSync(compareDir, { recursive: true });

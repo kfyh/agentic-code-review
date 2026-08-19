@@ -8,6 +8,7 @@ interface RepoInputFormProps {
   branch: string;
   setBranch: (branch: string) => void;
   history: HistoryEntry[];
+  availableBranches?: string[];
   onStartReview: () => void;
   isDetectingBranch: boolean;
   isReviewRunning: boolean;
@@ -21,6 +22,7 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
   branch,
   setBranch,
   history,
+  availableBranches = [],
   onStartReview,
   isDetectingBranch,
   isReviewRunning,
@@ -207,12 +209,44 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
               type="text"
               className="text-input"
               placeholder="main"
+              list="repo-branch-list"
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
               disabled={isReviewRunning}
               required
             />
+            {availableBranches.length > 0 && (
+              <datalist id="repo-branch-list">
+                {availableBranches.map((b) => (
+                  <option key={b} value={b} />
+                ))}
+              </datalist>
+            )}
           </div>
+          {availableBranches.length > 0 && (
+            <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Available:</span>
+              {availableBranches.slice(0, 6).map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setBranch(b)}
+                  disabled={isReviewRunning}
+                  style={{
+                    background: branch === b ? 'var(--accent-cyan-subtle)' : 'var(--bg-glass)',
+                    border: `1px solid ${branch === b ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
+                    borderRadius: '4px',
+                    color: branch === b ? 'var(--accent-cyan)' : 'var(--text-main)',
+                    fontSize: '0.75rem',
+                    padding: '2px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Staging Area Directory Config */}

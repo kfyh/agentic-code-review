@@ -64,6 +64,21 @@ describe('GitService', () => {
     expect(res.isFallback).toBe(false);
   });
 
+  test('parses remote branch list from git ls-remote --heads', async () => {
+    mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
+      const callback = typeof opts === 'function' ? (opts as ExecCallback) : (cb as ExecCallback);
+      callback(
+        null,
+        'sha1\trefs/heads/feature/JIRA-1\nsha2\trefs/heads/main\nsha3\trefs/heads/develop\n',
+        ''
+      );
+    });
+
+    const res = await gitService.getRemoteBranches('git@github.com:org/repo.git');
+    expect(res.success).toBe(true);
+    expect(res.branches).toEqual(['main', 'develop', 'feature/JIRA-1']);
+  });
+
   test('prepares git workspace by cloning, checking out branch, and resolving SHA', async () => {
     const logs: string[] = [];
     const validSha = '84923bd151f6d5d77dd19392667a1c34f476ebaa';

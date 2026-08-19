@@ -36,6 +36,7 @@ export const App: React.FC = () => {
   const [reports, setReports] = useState<ReviewReport[]>([]);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
 
+  const [availableBranches, setAvailableBranches] = useState<string[]>([]);
   const [isDetectingBranch, setIsDetectingBranch] = useState<boolean>(false);
   const [detectedBranchInfo, setDetectedBranchInfo] = useState<{
     isFallback?: boolean;
@@ -50,10 +51,12 @@ export const App: React.FC = () => {
           const items = await window.api.getHistory();
           setHistory(items);
           if (items.length > 0) {
-            setGitUrl((prev) => prev || items[0].gitUrl);
+            const initialUrl = items[0].gitUrl;
+            setGitUrl((prev) => prev || initialUrl);
             setBranch((prev) => prev || items[0].lastBranch);
-            setDiffGitUrl((prev) => prev || items[0].gitUrl);
+            setDiffGitUrl((prev) => prev || initialUrl);
             setCompareBranch((prev) => prev || items[0].lastBranch);
+            handleUrlBlurOrSelect(initialUrl, mode);
           }
         }
       } catch (err) {
@@ -96,25 +99,38 @@ export const App: React.FC = () => {
     };
   }, [mode]);
 
-  // Handle URL blur / history selection to detect remote default branch
-  const handleUrlBlurOrSelect = async (url: string) => {
+  // Handle URL blur / history selection to detect remote default branch and available branches
+  const handleUrlBlurOrSelect = async (url: string, targetMode: ReviewMode = mode) => {
     if (!url || !url.trim() || !window.api) return;
     setIsDetectingBranch(true);
     setDetectedBranchInfo(null);
 
     try {
-      const res = await window.api.detectBranch(url.trim());
+      const [detectRes, branchesRes] = await Promise.all([
+        window.api.detectBranch(url.trim()),
+        window.api.getBranches ? window.api.getBranches(url.trim()) : Promise.resolve({ success: false, branches: [] }),
+      ]);
+
       setIsDetectingBranch(false);
 
-      if (res.success && res.branch) {
-        if (mode === 'single') {
-          setBranch(res.branch);
-        } else {
-          setBaseBranch(res.branch);
-        }
-        setDetectedBranchInfo({ isFallback: res.isFallback });
+      if (branchesRes.success && branchesRes.branches.length > 0) {
+        setAvailableBranches(branchesRes.branches);
       } else {
-        setDetectedBranchInfo({ isFallback: true, error: res.error });
+        setAvailableBranches([]);
+      }
+
+      if (detectRes.success && detectRes.branch) {
+        if (targetMode === 'single') {
+          setBranch(detectRes.branch);
+        } else {
+          setBaseBranch(detectRes.branch);
+        }
+        setDetectedBranchInfo({ isFallback: detectRes.isFallback });
+      } else {
+        const defaultBranch = branchesRes.branches?.[0] || 'main';
+        if (targetMode === 'single') setBranch(defaultBranch);
+        else setBaseBranch(defaultBranch);
+        setDetectedBranchInfo({ isFallback: true, error: detectRes.error });
       }
     } catch (err: unknown) {
       setIsDetectingBranch(false);
@@ -122,6 +138,15 @@ export const App: React.FC = () => {
         isFallback: true,
         error: (err as Error)?.message || 'Branch detection query failed',
       });
+    }
+  };
+
+  const handleModeSwitch = (newMode: ReviewMode) => {
+    if (isReviewRunning) return;
+    setMode(newMode);
+    const targetUrl = newMode === 'diff' ? (diffGitUrl || gitUrl) : (gitUrl || diffGitUrl);
+    if (targetUrl) {
+      handleUrlBlurOrSelect(targetUrl, newMode);
     }
   };
 
@@ -209,7 +234,7 @@ export const App: React.FC = () => {
           <button
             type="button"
             className={`mode-tab ${mode === 'single' ? 'active' : ''}`}
-            onClick={() => !isReviewRunning && setMode('single')}
+            onClick={() => handleModeSwitch('single')}
             disabled={isReviewRunning}
           >
             <Code2 size={16} />
@@ -218,7 +243,7 @@ export const App: React.FC = () => {
           <button
             type="button"
             className={`mode-tab ${mode === 'diff' ? 'active' : ''}`}
-            onClick={() => !isReviewRunning && setMode('diff')}
+            onClick={() => handleModeSwitch('diff')}
             disabled={isReviewRunning}
           >
             <GitCompare size={16} />
@@ -235,11 +260,12 @@ export const App: React.FC = () => {
           branch={branch}
           setBranch={setBranch}
           history={history}
+          availableBranches={availableBranches}
           onStartReview={handleStartReview}
           isDetectingBranch={isDetectingBranch}
           isReviewRunning={isReviewRunning}
           detectedBranchInfo={detectedBranchInfo}
-          onUrlBlurOrSelect={handleUrlBlurOrSelect}
+          onUrlBlurOrSelect={(url) => handleUrlBlurOrSelect(url, 'single')}
         />
       ) : (
         <DiffInputForm
@@ -252,11 +278,12 @@ export const App: React.FC = () => {
           changeSpec={changeSpec}
           setChangeSpec={setChangeSpec}
           history={history}
+          availableBranches={availableBranches}
           onStartDiffReview={handleStartDiffReview}
           isDetectingBranch={isDetectingBranch}
           isReviewRunning={isReviewRunning}
           detectedBranchInfo={detectedBranchInfo}
-          onUrlBlurOrSelect={handleUrlBlurOrSelect}
+          onUrlBlurOrSelect={(url) => handleUrlBlurOrSelect(url, 'diff')}
         />
       )}
 

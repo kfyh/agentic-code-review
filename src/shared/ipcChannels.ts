@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
 
   // Git repository operations
   DETECT_BRANCH: 'git:detect-branch',
+  GET_BRANCHES: 'git:get-branches',
 
   // Local repository history
   GET_HISTORY: 'history:get',

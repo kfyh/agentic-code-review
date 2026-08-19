@@ -22,13 +22,30 @@ export class ReportService {
 
   /**
    * Scans and loads generated markdown reports from `<stagedDir>/reports/`, `<stagedDir>/output/`,
-   * or root-level report files in `<stagedDir>/`.
+   * `<stagedDir>/compare/reports/`, `<stagedDir>/base/reports/`, or root-level report files in `<stagedDir>/`.
+   * Supports standard commit SHA and `diff-<commitSha>` staging directories.
    */
   public async getReports(commitSha: string): Promise<ReviewReport[]> {
-    const stagedDir = getStagedDir(commitSha);
-
-    if (!fs.existsSync(stagedDir)) {
+    if (!commitSha || !commitSha.trim()) {
       return [];
+    }
+
+    const cleanId = commitSha.trim();
+    const candidateDirs: string[] = [];
+
+    // 1. Direct staging dir lookup
+    candidateDirs.push(getStagedDir(cleanId));
+
+    // 2. Check with/without diff- prefix
+    if (!cleanId.startsWith('diff-')) {
+      candidateDirs.push(getStagedDir(`diff-${cleanId}`));
+    } else {
+      candidateDirs.push(getStagedDir(cleanId.replace(/^diff-/, '')));
+    }
+
+    // 3. Absolute path support
+    if (path.isAbsolute(cleanId)) {
+      candidateDirs.push(cleanId);
     }
 
     const reports: ReviewReport[] = [];
@@ -41,6 +58,8 @@ export class ReportService {
         if (IGNORED_MARKDOWN_FILES.has(fileName.toLowerCase())) return;
 
         const content = fs.readFileSync(filePath, 'utf-8');
+        if (!content || content.trim().length === 0) return;
+
         const packageName = fileName.replace(/\.md$/i, '');
         reports.push({
           packageName,
@@ -54,9 +73,15 @@ export class ReportService {
     };
 
     try {
-      this.scanDirectoryForReports(path.join(stagedDir, 'reports'), addReportFromFile);
-      this.scanDirectoryForReports(path.join(stagedDir, 'output'), addReportFromFile);
-      this.scanRootFilesForReports(stagedDir, addReportFromFile);
+      for (const stagedDir of candidateDirs) {
+        if (!fs.existsSync(stagedDir)) continue;
+
+        this.scanDirectoryForReports(path.join(stagedDir, 'reports'), addReportFromFile);
+        this.scanDirectoryForReports(path.join(stagedDir, 'output'), addReportFromFile);
+        this.scanDirectoryForReports(path.join(stagedDir, 'compare', 'reports'), addReportFromFile);
+        this.scanDirectoryForReports(path.join(stagedDir, 'base', 'reports'), addReportFromFile);
+        this.scanRootFilesForReports(stagedDir, addReportFromFile);
+      }
 
       if (reports.length === 0) {
         this.scanFallbackDirectories(addReportFromFile);
@@ -64,7 +89,7 @@ export class ReportService {
 
       return reports;
     } catch (err) {
-      console.error(`Failed to read reports from ${stagedDir}:`, err);
+      console.error(`Failed to read reports for commitSha ${commitSha}:`, err);
       return [];
     }
   }
@@ -72,11 +97,13 @@ export class ReportService {
   /**
    * Fallback extraction: Parses streamed stdout lines to recover markdown review report
    * if the container agent wrote to an unmounted path or failed to save to disk.
+   * Targets `reports/review.md` for both review flows.
    */
   public extractReportFromStdout(
     stdoutLines: string[],
     stagedDir: string,
-    onLog?: (msg: string) => void
+    onLog?: (msg: string) => void,
+    reportFileName: string = 'review.md'
   ): boolean {
     const reportsDir = path.join(stagedDir, 'reports');
     if (this.hasNonEmptyReports(reportsDir)) {
@@ -92,7 +119,7 @@ export class ReportService {
       fs.mkdirSync(reportsDir, { recursive: true });
     }
 
-    const targetPath = path.join(reportsDir, 'code_smells.md');
+    const targetPath = path.join(reportsDir, reportFileName);
     fs.writeFileSync(targetPath, reportText, 'utf-8');
     if (onLog) {
       onLog(
@@ -112,12 +139,13 @@ export class ReportService {
     stagedDir: string,
     addReportFn: (filePath: string) => void
   ): void {
+    if (!fs.existsSync(stagedDir)) return;
     const rootFiles = fs.readdirSync(stagedDir).filter((f) => f.endsWith('.md'));
     for (const file of rootFiles) {
       const lower = file.toLowerCase();
-      if (lower.includes('code_smells') || lower.includes('report') || lower.includes('smells')) {
-        addReportFn(path.join(stagedDir, file));
-      }
+      // Include all markdown files in root except standard ignored repository documents
+      if (IGNORED_MARKDOWN_FILES.has(lower)) continue;
+      addReportFn(path.join(stagedDir, file));
     }
   }
 

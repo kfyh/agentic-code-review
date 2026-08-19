@@ -10,6 +10,7 @@ import {
 
 const api: WindowApi = {
   detectBranch: (gitUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.DETECT_BRANCH, gitUrl),
+  getBranches: (gitUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_BRANCHES, gitUrl),
   startReview: (req: ReviewRequest) => ipcRenderer.invoke(IPC_CHANNELS.START_REVIEW, req),
   startDiffReview: (req: DiffReviewRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.START_DIFF_REVIEW, req),

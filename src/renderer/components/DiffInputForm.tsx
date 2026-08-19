@@ -12,6 +12,7 @@ interface DiffInputFormProps {
   changeSpec: string;
   setChangeSpec: (spec: string) => void;
   history: HistoryEntry[];
+  availableBranches?: string[];
   onStartDiffReview: () => void;
   isDetectingBranch: boolean;
   isReviewRunning: boolean;
@@ -29,6 +30,7 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
   changeSpec,
   setChangeSpec,
   history,
+  availableBranches = [],
   onStartDiffReview,
   isDetectingBranch,
   isReviewRunning,
@@ -184,6 +186,15 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
           )}
         </div>
 
+        {/* Shared Datalist for Available Branches */}
+        {availableBranches.length > 0 && (
+          <datalist id="diff-branch-list">
+            {availableBranches.map((b) => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
+        )}
+
         {/* Base Branch Input */}
         <div className="field-group">
           <label className="field-label">
@@ -220,12 +231,37 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
               type="text"
               className="text-input"
               placeholder="main"
+              list="diff-branch-list"
               value={baseBranch}
               onChange={(e) => setBaseBranch(e.target.value)}
               disabled={isReviewRunning}
               required
             />
           </div>
+          {availableBranches.length > 0 && (
+            <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Select Base:</span>
+              {availableBranches.slice(0, 5).map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setBaseBranch(b)}
+                  disabled={isReviewRunning}
+                  style={{
+                    background: baseBranch === b ? 'var(--accent-cyan-subtle)' : 'var(--bg-glass)',
+                    border: `1px solid ${baseBranch === b ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
+                    borderRadius: '4px',
+                    color: baseBranch === b ? 'var(--accent-cyan)' : 'var(--text-main)',
+                    fontSize: '0.75rem',
+                    padding: '2px 6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Compare Branch Input */}
@@ -241,12 +277,37 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
               type="text"
               className="text-input"
               placeholder="feature/JIRA-1234"
+              list="diff-branch-list"
               value={compareBranch}
               onChange={(e) => setCompareBranch(e.target.value)}
               disabled={isReviewRunning}
               required
             />
           </div>
+          {availableBranches.length > 0 && (
+            <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Select Compare:</span>
+              {availableBranches.slice(0, 5).map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setCompareBranch(b)}
+                  disabled={isReviewRunning}
+                  style={{
+                    background: compareBranch === b ? 'var(--accent-cyan-subtle)' : 'var(--bg-glass)',
+                    border: `1px solid ${compareBranch === b ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
+                    borderRadius: '4px',
+                    color: compareBranch === b ? 'var(--accent-cyan)' : 'var(--text-main)',
+                    fontSize: '0.75rem',
+                    padding: '2px 6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Change Specification TextArea */}
