@@ -37,9 +37,12 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
 
   useEffect(() => {
     if (window.api && window.api.getStagingDir) {
-      window.api.getStagingDir().then((dir) => {
-        if (dir) setStagingDirInput(dir);
-      });
+      window.api
+        .getStagingDir()
+        .then((dir) => {
+          if (dir) setStagingDirInput(dir);
+        })
+        .catch(console.error);
     }
   }, []);
 
@@ -72,9 +75,13 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
 
   const handleStagingDirBlur = async () => {
     if (window.api && window.api.setStagingDir) {
-      const res = await window.api.setStagingDir(stagingDirInput.trim());
-      if (res && res.stagingDir) {
-        setStagingDirInput(res.stagingDir);
+      try {
+        const res = await window.api.setStagingDir(stagingDirInput.trim());
+        if (res && res.stagingDir) {
+          setStagingDirInput(res.stagingDir);
+        }
+      } catch (err) {
+        console.error('Failed to set staging directory:', err);
       }
     }
   };

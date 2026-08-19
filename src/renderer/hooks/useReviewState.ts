@@ -35,11 +35,14 @@ export function useReviewState(
       if (update.error) setError(update.error);
 
       if (update.stage === 'completed' && update.commitSha) {
-        window.api.getReports(update.commitSha).then((res) => {
-          setReports(res);
-          setShowReportModal(true);
-        });
-        window.api.getHistory().then(setHistory);
+        window.api
+          .getReports(update.commitSha)
+          .then((res) => {
+            setReports(res);
+            setShowReportModal(true);
+          })
+          .catch(console.error);
+        window.api.getHistory().then(setHistory).catch(console.error);
       }
     });
 

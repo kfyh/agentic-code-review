@@ -251,12 +251,12 @@ export class ReviewPipelineRunner {
         promptTemplate = `# PR & Diff Code Review\n\nTarget Change Specification:\n\n{{CHANGE_SPEC}}\n`;
       }
 
-      const mergedPrompt = promptTemplate.replace(
-        '{{CHANGE_SPEC}}',
+      const specContent =
         changeSpec && changeSpec.trim()
           ? changeSpec.trim()
-          : 'No explicit Change Specification provided. Conduct a general PR diff code review.'
-      );
+          : 'No explicit Change Specification provided. Conduct a general PR diff code review.';
+
+      const mergedPrompt = promptTemplate.replace('{{CHANGE_SPEC}}', () => specContent);
 
       // 5. Agent execution stage
       onStateUpdate({ stage: 'running', branch: compareBranch, commitSha: compareCommitSha });
