@@ -5,16 +5,36 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "npm run build:main && npm run build:preload && vite",
+    "start": "npm run build && electron .",
     "build:main": "esbuild src/main/index.ts --bundle --platform=node --target=node20 --outfile=dist/main/index.js --external:electron",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --target=node20 --outfile=dist/preload/index.js --external:electron",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:preload && npm run build:renderer",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
+  },
+  "build": {
+    "appId": "com.agentic.codereview",
+    "productName": "Agentic Code Review",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "dir"
+      ]
+    }
   },
   "dependencies": {
     "dompurify": "^3.1.6",
@@ -33,6 +53,7 @@
     "@typescript-eslint/parser": "^8.67.0",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^31.1.0",
+    "electron-builder": "^24.13.3",
     "esbuild": "^0.21.5",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
