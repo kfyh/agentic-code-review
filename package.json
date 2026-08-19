@@ -24,7 +24,11 @@
     "productName": "Agentic Code Review",
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "code-review-prompt.md"
+    ],
+    "extraResources": [
+      "code-review-prompt.md"
     ],
     "directories": {
       "output": "release"
