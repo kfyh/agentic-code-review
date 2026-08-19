@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { HistoryEntry } from '../../shared/types';
 import { History, Play, GitBranch, RefreshCw, AlertCircle, Folder, FileText, GitCompare } from 'lucide-react';
+import { BranchBadgeList } from './BranchBadgeList';
+import { HistoryDropdownMenu } from './HistoryDropdownMenu';
 
 interface DiffInputFormProps {
   gitUrl: string;
@@ -85,32 +87,52 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
     }
   };
 
-  const [now] = useState(() => Date.now());
-
-  const formatTimeAgo = (isoString: string, currentTimestamp: number) => {
-    try {
-      const date = new Date(isoString);
-      const diffMinutes = Math.floor((currentTimestamp - date.getTime()) / 60000);
-      if (diffMinutes < 60) return `${diffMinutes} mins ago`;
-      const diffHours = Math.floor(diffMinutes / 60);
-      if (diffHours < 24) return `${diffHours} hours ago`;
-      return `${Math.floor(diffHours / 24)} days ago`;
-    } catch {
-      return '';
+  const renderBranchStatusHint = () => {
+    if (isDetectingBranch) {
+      return (
+        <span className="field-hint" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <RefreshCw size={12} className="spin" /> Detecting...
+        </span>
+      );
     }
+    if (detectedBranchInfo?.isFallback) {
+      return (
+        <span
+          className="field-hint"
+          style={{
+            color: 'var(--status-warn)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
+          <AlertCircle size={12} /> Fallback
+        </span>
+      );
+    }
+    if (baseBranch) {
+      return (
+        <span className="field-hint" style={{ color: 'var(--status-success)' }}>
+          Auto-detected
+        </span>
+      );
+    }
+    return null;
   };
+
+  const isSubmitDisabled =
+    isReviewRunning ||
+    !gitUrl.trim() ||
+    !baseBranch.trim() ||
+    !compareBranch.trim() ||
+    isDetectingBranch;
 
   return (
     <div className="glass-panel">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (
-            !isReviewRunning &&
-            gitUrl.trim() &&
-            baseBranch.trim() &&
-            compareBranch.trim()
-          ) {
+          if (!isSubmitDisabled) {
             onStartDiffReview();
           }
         }}
@@ -156,33 +178,8 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
           </div>
 
           {/* History Dropdown Menu */}
-          {showHistoryDropdown && history.length > 0 && (
-            <div className="dropdown-menu">
-              <div
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  color: 'var(--text-dim)',
-                  borderBottom: '1px solid var(--border-color)',
-                }}
-              >
-                Recent Repositories
-              </div>
-              {history.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="dropdown-item"
-                  onClick={() => handleSelectHistoryItem(item)}
-                >
-                  <div className="dropdown-url">{item.gitUrl}</div>
-                  <div className="dropdown-meta">
-                    Branch: <span style={{ color: 'var(--accent-cyan)' }}>{item.lastBranch}</span> •{' '}
-                    {formatTimeAgo(item.lastReviewedAt, now)}
-                  </div>
-                </div>
-              ))}
-            </div>
+          {showHistoryDropdown && (
+            <HistoryDropdownMenu history={history} onSelect={handleSelectHistoryItem} />
           )}
         </div>
 
@@ -201,30 +198,7 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <GitBranch size={14} /> Base Branch (Target)
             </span>
-            {isDetectingBranch ? (
-              <span
-                className="field-hint"
-                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                <RefreshCw size={12} className="spin" /> Detecting...
-              </span>
-            ) : detectedBranchInfo?.isFallback ? (
-              <span
-                className="field-hint"
-                style={{
-                  color: 'var(--status-warn)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <AlertCircle size={12} /> Fallback
-              </span>
-            ) : baseBranch ? (
-              <span className="field-hint" style={{ color: 'var(--status-success)' }}>
-                Auto-detected
-              </span>
-            ) : null}
+            {renderBranchStatusHint()}
           </label>
           <div className="input-wrapper">
             <input
@@ -238,30 +212,13 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
               required
             />
           </div>
-          {availableBranches.length > 0 && (
-            <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Select Base:</span>
-              {availableBranches.slice(0, 5).map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => setBaseBranch(b)}
-                  disabled={isReviewRunning}
-                  style={{
-                    background: baseBranch === b ? 'var(--accent-cyan-subtle)' : 'var(--bg-glass)',
-                    border: `1px solid ${baseBranch === b ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
-                    borderRadius: '4px',
-                    color: baseBranch === b ? 'var(--accent-cyan)' : 'var(--text-main)',
-                    fontSize: '0.75rem',
-                    padding: '2px 6px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {b}
-                </button>
-              ))}
-            </div>
-          )}
+          <BranchBadgeList
+            label="Select Base"
+            branches={availableBranches}
+            selectedBranch={baseBranch}
+            onSelectBranch={setBaseBranch}
+            disabled={isReviewRunning}
+          />
         </div>
 
         {/* Compare Branch Input */}
@@ -284,30 +241,13 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
               required
             />
           </div>
-          {availableBranches.length > 0 && (
-            <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Select Compare:</span>
-              {availableBranches.slice(0, 5).map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => setCompareBranch(b)}
-                  disabled={isReviewRunning}
-                  style={{
-                    background: compareBranch === b ? 'var(--accent-cyan-subtle)' : 'var(--bg-glass)',
-                    border: `1px solid ${compareBranch === b ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
-                    borderRadius: '4px',
-                    color: compareBranch === b ? 'var(--accent-cyan)' : 'var(--text-main)',
-                    fontSize: '0.75rem',
-                    padding: '2px 6px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {b}
-                </button>
-              ))}
-            </div>
-          )}
+          <BranchBadgeList
+            label="Select Compare"
+            branches={availableBranches}
+            selectedBranch={compareBranch}
+            onSelectBranch={setCompareBranch}
+            disabled={isReviewRunning}
+          />
         </div>
 
         {/* Change Specification TextArea */}
@@ -352,13 +292,7 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
         <button
           type="submit"
           className="btn-primary"
-          disabled={
-            isReviewRunning ||
-            !gitUrl.trim() ||
-            !baseBranch.trim() ||
-            !compareBranch.trim() ||
-            isDetectingBranch
-          }
+          disabled={isSubmitDisabled}
         >
           <Play size={16} />
           <span>{isReviewRunning ? 'Diff Review in Progress...' : 'Start Diff Review'}</span>

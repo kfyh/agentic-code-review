@@ -84,4 +84,50 @@ describe('StagingService', () => {
     expect(fs.existsSync(stagedDir)).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'old_file.txt'))).toBe(false);
   });
+
+  test('prepares diff staging workspace copying base/, compare/, diff.patch and creating context.json', () => {
+    const diffWorkspaceDir = path.join(
+      os.tmpdir(),
+      `jest_diff_ws_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    );
+    const baseSrc = path.join(diffWorkspaceDir, 'base', 'src');
+    const compareSrc = path.join(diffWorkspaceDir, 'compare', 'src');
+    fs.mkdirSync(baseSrc, { recursive: true });
+    fs.mkdirSync(compareSrc, { recursive: true });
+    fs.writeFileSync(path.join(baseSrc, 'old.ts'), 'export const v = 1;');
+    fs.writeFileSync(path.join(compareSrc, 'new.ts'), 'export const v = 2;');
+    fs.writeFileSync(path.join(diffWorkspaceDir, 'diff.patch'), 'diff --git a/src/index.ts b/src/index.ts');
+
+    const baseSha = '1111111111111111111111111111111111111111';
+    const compareSha = '2222222222222222222222222222222222222222';
+    const changeSpec = 'JIRA-123: Add feature';
+
+    const { stagedDir, contextJsonPath } = stagingService.prepareDiffStagingWorkspace(
+      diffWorkspaceDir,
+      'git@github.com:org/repo.git',
+      'main',
+      'feature/jira-123',
+      changeSpec,
+      baseSha,
+      compareSha
+    );
+
+    expect(stagedDir).toContain(`diff-${compareSha}`);
+    expect(fs.existsSync(stagedDir)).toBe(true);
+    expect(fs.existsSync(contextJsonPath)).toBe(true);
+    expect(fs.existsSync(path.join(stagedDir, 'base', 'src', 'old.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(stagedDir, 'compare', 'src', 'new.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(stagedDir, 'diff.patch'))).toBe(true);
+
+    const contextData = JSON.parse(fs.readFileSync(contextJsonPath, 'utf-8'));
+    expect(contextData.repoUrl).toBe('git@github.com:org/repo.git');
+    expect(contextData.baseBranch).toBe('main');
+    expect(contextData.compareBranch).toBe('feature/jira-123');
+    expect(contextData.changeSpec).toBe(changeSpec);
+    expect(contextData.baseCommitSha).toBe(baseSha);
+    expect(contextData.compareCommitSha).toBe(compareSha);
+
+    // Clean up
+    fs.rmSync(diffWorkspaceDir, { recursive: true, force: true });
+  });
 });

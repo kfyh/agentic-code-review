@@ -1,17 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import {
-  HistoryEntry,
-  LogEntry,
-  ReviewReport,
-  ReviewStage,
-  ReviewStateUpdate,
-  ReviewMode,
-} from '../shared/types';
+import { ReviewMode } from '../shared/types';
 import { LogConsole } from './components/LogConsole';
 import { RepoInputForm } from './components/RepoInputForm';
 import { DiffInputForm } from './components/DiffInputForm';
 import { ReportViewer } from './components/ReportViewer';
 import { StatusTimeline } from './components/StatusTimeline';
+import { useReviewState } from './hooks/useReviewState';
 import { ShieldCheck, Code2, GitCompare } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -27,21 +21,29 @@ export const App: React.FC = () => {
   const [compareBranch, setCompareBranch] = useState<string>('');
   const [changeSpec, setChangeSpec] = useState<string>('');
 
-  // Shared execution & UI state
-  const [stage, setStage] = useState<ReviewStage>('idle');
-  const [commitSha, setCommitSha] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [reports, setReports] = useState<ReviewReport[]>([]);
-  const [showReportModal, setShowReportModal] = useState<boolean>(false);
-
+  // Branch detection state
   const [availableBranches, setAvailableBranches] = useState<string[]>([]);
   const [isDetectingBranch, setIsDetectingBranch] = useState<boolean>(false);
   const [detectedBranchInfo, setDetectedBranchInfo] = useState<{
     isFallback?: boolean;
     error?: string;
   } | null>(null);
+
+  const {
+    stage,
+    commitSha,
+    error,
+    setError,
+    history,
+    setHistory,
+    logs,
+    setLogs,
+    reports,
+    showReportModal,
+    setShowReportModal,
+    isReviewRunning,
+    resetForNewReview,
+  } = useReviewState(mode, setBranch, setCompareBranch);
 
   // Load initial repo history
   useEffect(() => {
@@ -65,39 +67,6 @@ export const App: React.FC = () => {
     };
     loadHistory();
   }, []);
-
-  // Subscribe to IPC state updates and log entries
-  useEffect(() => {
-    if (!window.api) return;
-
-    const unsubscribeState = window.api.onStateUpdate((update: ReviewStateUpdate) => {
-      setStage(update.stage);
-      if (update.branch) {
-        if (mode === 'single') setBranch(update.branch);
-        else setCompareBranch(update.branch);
-      }
-      if (update.commitSha) setCommitSha(update.commitSha);
-      if (update.error) setError(update.error);
-
-      if (update.stage === 'completed' && update.commitSha) {
-        window.api.getReports(update.commitSha).then((res) => {
-          setReports(res);
-          setShowReportModal(true);
-        });
-        // Refresh history list
-        window.api.getHistory().then(setHistory);
-      }
-    });
-
-    const unsubscribeLog = window.api.onLogEntry((log: LogEntry) => {
-      setLogs((prev) => [...prev, log]);
-    });
-
-    return () => {
-      unsubscribeState();
-      unsubscribeLog();
-    };
-  }, [mode]);
 
   // Handle URL blur / history selection to detect remote default branch and available branches
   const handleUrlBlurOrSelect = async (url: string, targetMode: ReviewMode = mode) => {
@@ -153,12 +122,7 @@ export const App: React.FC = () => {
   // Flow 1 Start review trigger
   const handleStartReview = async () => {
     if (!gitUrl.trim() || !branch.trim() || !window.api) return;
-
-    setError(undefined);
-    setReports([]);
-    setLogs([]);
-    setShowReportModal(false);
-    setStage('fetching');
+    resetForNewReview();
 
     const res = await window.api.startReview({
       gitUrl: gitUrl.trim(),
@@ -172,19 +136,8 @@ export const App: React.FC = () => {
 
   // Flow 2 Start diff review trigger
   const handleStartDiffReview = async () => {
-    if (
-      !diffGitUrl.trim() ||
-      !baseBranch.trim() ||
-      !compareBranch.trim() ||
-      !window.api
-    )
-      return;
-
-    setError(undefined);
-    setReports([]);
-    setLogs([]);
-    setShowReportModal(false);
-    setStage('fetching');
+    if (!diffGitUrl.trim() || !baseBranch.trim() || !compareBranch.trim() || !window.api) return;
+    resetForNewReview();
 
     const res = await window.api.startDiffReview({
       gitUrl: diffGitUrl.trim(),
@@ -204,12 +157,6 @@ export const App: React.FC = () => {
       await window.api.abortReview();
     }
   };
-
-  const isReviewRunning =
-    stage === 'fetching' ||
-    stage === 'installing' ||
-    stage === 'staging' ||
-    stage === 'running';
 
   return (
     <div className="app-container">

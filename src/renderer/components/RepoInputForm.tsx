@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { HistoryEntry } from '../../shared/types';
 import { History, Play, GitBranch, RefreshCw, AlertCircle, Folder } from 'lucide-react';
+import { BranchBadgeList } from './BranchBadgeList';
+import { HistoryDropdownMenu } from './HistoryDropdownMenu';
 
 interface RepoInputFormProps {
   gitUrl: string;
@@ -77,27 +79,48 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
     }
   };
 
-  const [now] = useState(() => Date.now());
-
-  const formatTimeAgo = (isoString: string, currentTimestamp: number) => {
-    try {
-      const date = new Date(isoString);
-      const diffMinutes = Math.floor((currentTimestamp - date.getTime()) / 60000);
-      if (diffMinutes < 60) return `${diffMinutes} mins ago`;
-      const diffHours = Math.floor(diffMinutes / 60);
-      if (diffHours < 24) return `${diffHours} hours ago`;
-      return `${Math.floor(diffHours / 24)} days ago`;
-    } catch {
-      return '';
+  const renderBranchStatusHint = () => {
+    if (isDetectingBranch) {
+      return (
+        <span className="field-hint" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <RefreshCw size={12} className="spin" /> Detecting...
+        </span>
+      );
     }
+    if (detectedBranchInfo?.isFallback) {
+      return (
+        <span
+          className="field-hint"
+          style={{
+            color: 'var(--status-warn)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
+          <AlertCircle size={12} /> Fallback
+        </span>
+      );
+    }
+    if (branch) {
+      return (
+        <span className="field-hint" style={{ color: 'var(--status-success)' }}>
+          Auto-detected
+        </span>
+      );
+    }
+    return null;
   };
+
+  const isSubmitDisabled =
+    isReviewRunning || !gitUrl.trim() || !branch.trim() || isDetectingBranch;
 
   return (
     <div className="glass-panel">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!isReviewRunning && gitUrl.trim() && branch.trim()) {
+          if (!isSubmitDisabled) {
             onStartReview();
           }
         }}
@@ -143,33 +166,8 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
           </div>
 
           {/* History Dropdown Menu */}
-          {showHistoryDropdown && history.length > 0 && (
-            <div className="dropdown-menu">
-              <div
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  color: 'var(--text-dim)',
-                  borderBottom: '1px solid var(--border-color)',
-                }}
-              >
-                Recent Repositories
-              </div>
-              {history.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="dropdown-item"
-                  onClick={() => handleSelectHistoryItem(item)}
-                >
-                  <div className="dropdown-url">{item.gitUrl}</div>
-                  <div className="dropdown-meta">
-                    Branch: <span style={{ color: 'var(--accent-cyan)' }}>{item.lastBranch}</span> •{' '}
-                    {formatTimeAgo(item.lastReviewedAt, now)}
-                  </div>
-                </div>
-              ))}
-            </div>
+          {showHistoryDropdown && (
+            <HistoryDropdownMenu history={history} onSelect={handleSelectHistoryItem} />
           )}
         </div>
 
@@ -179,30 +177,7 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <GitBranch size={14} /> Branch Name
             </span>
-            {isDetectingBranch ? (
-              <span
-                className="field-hint"
-                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                <RefreshCw size={12} className="spin" /> Detecting...
-              </span>
-            ) : detectedBranchInfo?.isFallback ? (
-              <span
-                className="field-hint"
-                style={{
-                  color: 'var(--status-warn)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <AlertCircle size={12} /> Fallback
-              </span>
-            ) : branch ? (
-              <span className="field-hint" style={{ color: 'var(--status-success)' }}>
-                Auto-detected
-              </span>
-            ) : null}
+            {renderBranchStatusHint()}
           </label>
           <div className="input-wrapper">
             <input
@@ -223,30 +198,13 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
               </datalist>
             )}
           </div>
-          {availableBranches.length > 0 && (
-            <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Available:</span>
-              {availableBranches.slice(0, 6).map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => setBranch(b)}
-                  disabled={isReviewRunning}
-                  style={{
-                    background: branch === b ? 'var(--accent-cyan-subtle)' : 'var(--bg-glass)',
-                    border: `1px solid ${branch === b ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
-                    borderRadius: '4px',
-                    color: branch === b ? 'var(--accent-cyan)' : 'var(--text-main)',
-                    fontSize: '0.75rem',
-                    padding: '2px 8px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {b}
-                </button>
-              ))}
-            </div>
-          )}
+          <BranchBadgeList
+            label="Available"
+            branches={availableBranches}
+            selectedBranch={branch}
+            onSelectBranch={setBranch}
+            disabled={isReviewRunning}
+          />
         </div>
 
         {/* Staging Area Directory Config */}
@@ -270,11 +228,11 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
           </div>
         </div>
 
-        {/* Start Code Review Trigger */}
+        {/* Start Review Trigger */}
         <button
           type="submit"
           className="btn-primary"
-          disabled={isReviewRunning || !gitUrl.trim() || !branch.trim() || isDetectingBranch}
+          disabled={isSubmitDisabled}
         >
           <Play size={16} />
           <span>{isReviewRunning ? 'Review in Progress...' : 'Start Code Review'}</span>

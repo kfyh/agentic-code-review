@@ -278,27 +278,57 @@ export class GitService {
 
     // Checkout and resolve base branch SHA
     log(`[GIT DIFF] Resolving base branch (${cleanBase})...`);
-    await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBase)}`, cacheDir, log).catch(() => {});
-    await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBase)}`, cacheDir, log).catch(async () => {
+    try {
+      await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
+    } catch (fetchErr) {
+      log(
+        `[GIT DIFF NOTICE] Fetching base branch ${cleanBase} notice: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`
+      );
+    }
+
+    try {
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
+    } catch {
+      log(`[GIT DIFF] Local checkout failed, checking out origin/${cleanBase}...`);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanBase)} origin/${this.escapeShellArg(cleanBase)}`,
         cacheDir,
         log
       );
-    });
+    }
     const baseSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
+    if (!/^[0-9a-fA-F]{40}$/.test(baseSha)) {
+      throw new Error(
+        `Failed to resolve valid full commit SHA for base branch "${cleanBase}": received "${baseSha}"`
+      );
+    }
 
     // Checkout and resolve compare branch SHA
     log(`[GIT DIFF] Resolving compare branch (${cleanCompare})...`);
-    await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanCompare)}`, cacheDir, log).catch(() => {});
-    await this.runGitCommand(`checkout ${this.escapeShellArg(cleanCompare)}`, cacheDir, log).catch(async () => {
+    try {
+      await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
+    } catch (fetchErr) {
+      log(
+        `[GIT DIFF NOTICE] Fetching compare branch ${cleanCompare} notice: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`
+      );
+    }
+
+    try {
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
+    } catch {
+      log(`[GIT DIFF] Local checkout failed, checking out origin/${cleanCompare}...`);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanCompare)} origin/${this.escapeShellArg(cleanCompare)}`,
         cacheDir,
         log
       );
-    });
+    }
     const compareSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
+    if (!/^[0-9a-fA-F]{40}$/.test(compareSha)) {
+      throw new Error(
+        `Failed to resolve valid full commit SHA for compare branch "${cleanCompare}": received "${compareSha}"`
+      );
+    }
 
     log(`[GIT DIFF] Base SHA: ${baseSha} | Compare SHA: ${compareSha}`);
 

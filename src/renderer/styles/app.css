@@ -531,6 +531,27 @@ body {
   border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
+.modal-action-btn {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.modal-action-btn:hover {
+  background: var(--accent-cyan-subtle);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
 .modal-close-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);

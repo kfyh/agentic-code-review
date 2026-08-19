@@ -1,34 +1,5 @@
 export * from './ipcChannels';
 
-// Branded domain types
-export type GitUrl = string & { readonly __brand: unique symbol };
-export type CommitSha = string & { readonly __brand: unique symbol };
-export type BranchName = string & { readonly __brand: unique symbol };
-
-export function makeGitUrl(url: string): GitUrl {
-  const trimmed = url.trim();
-  if (!trimmed) {
-    throw new Error('Git URL cannot be empty');
-  }
-  return trimmed as GitUrl;
-}
-
-export function makeCommitSha(sha: string): CommitSha {
-  const trimmed = sha.trim();
-  if (!trimmed) {
-    throw new Error('Commit SHA cannot be empty');
-  }
-  return trimmed as CommitSha;
-}
-
-export function makeBranchName(branch: string): BranchName {
-  const trimmed = branch.trim();
-  if (!trimmed) {
-    throw new Error('Branch name cannot be empty');
-  }
-  return trimmed as BranchName;
-}
-
 export interface HistoryEntry {
   gitUrl: string;
   lastBranch: string;

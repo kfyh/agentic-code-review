@@ -152,6 +152,53 @@ describe('IPC Handlers', () => {
     );
   });
 
+  test('handles start-diff-review IPC call and sends webContents updates', async () => {
+    (mockGitService as Record<string, unknown>).prepareDiffGitWorkspace = jest
+      .fn()
+      .mockResolvedValue({
+        baseCommitSha: '1111111111111111111111111111111111111111',
+        compareCommitSha: '2222222222222222222222222222222222222222',
+        workspaceDir: '/tmp/workspace/diff-123',
+      });
+    (mockStagingService as Record<string, unknown>).prepareDiffStagingWorkspace = jest
+      .fn()
+      .mockReturnValue({
+        stagedDir: '/tmp/staged/diff-123',
+        contextJsonPath: '/tmp/staged/diff-123/context.json',
+      });
+
+    const res = (await handlers[IPC_CHANNELS.START_DIFF_REVIEW](null, {
+      gitUrl: 'git@github.com:org/repo.git',
+      baseBranch: 'main',
+      compareBranch: 'feature/pr-1',
+      changeSpec: 'Review change spec',
+    })) as { success: boolean; commitSha?: string };
+
+    expect(res.success).toBe(true);
+    expect(res.commitSha).toBe('2222222222222222222222222222222222222222');
+    expect(mockWindow.webContents.send).toHaveBeenCalledWith(
+      IPC_CHANNELS.REVIEW_STATE_UPDATE,
+      expect.objectContaining({ stage: 'completed' })
+    );
+  });
+
+  test('handles get-branches IPC call', async () => {
+    (mockGitService as Record<string, unknown>).getRemoteBranches = jest.fn().mockResolvedValue({
+      success: true,
+      branches: ['main', 'develop'],
+    });
+
+    const res = (await handlers[IPC_CHANNELS.GET_BRANCHES](
+      null,
+      'git@github.com:org/repo.git'
+    )) as {
+      success: boolean;
+      branches: string[];
+    };
+    expect(res.success).toBe(true);
+    expect(res.branches).toEqual(['main', 'develop']);
+  });
+
   test('ignores sendStateUpdate and sendLogEntry if window is destroyed', async () => {
     mockWindow.isDestroyed.mockReturnValue(true);
     const res = (await handlers[IPC_CHANNELS.START_REVIEW](null, { gitUrl: '', branch: '' })) as {
