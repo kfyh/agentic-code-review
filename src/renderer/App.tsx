@@ -1,33 +1,49 @@
 import React, { useEffect, useState } from 'react';
-import {
-  HistoryEntry,
-  LogEntry,
-  ReviewReport,
-  ReviewStage,
-  ReviewStateUpdate,
-} from '../shared/types';
+import { ReviewMode } from '../shared/types';
 import { LogConsole } from './components/LogConsole';
 import { RepoInputForm } from './components/RepoInputForm';
+import { DiffInputForm } from './components/DiffInputForm';
 import { ReportViewer } from './components/ReportViewer';
 import { StatusTimeline } from './components/StatusTimeline';
-import { ShieldCheck } from 'lucide-react';
+import { useReviewState } from './hooks/useReviewState';
+import { ShieldCheck, Code2, GitCompare } from 'lucide-react';
 
 export const App: React.FC = () => {
+  const [mode, setMode] = useState<ReviewMode>('single');
+
+  // Flow 1 state
   const [gitUrl, setGitUrl] = useState<string>('');
   const [branch, setBranch] = useState<string>('');
-  const [stage, setStage] = useState<ReviewStage>('idle');
-  const [commitSha, setCommitSha] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [reports, setReports] = useState<ReviewReport[]>([]);
-  const [showReportModal, setShowReportModal] = useState<boolean>(false);
 
+  // Flow 2 state
+  const [diffGitUrl, setDiffGitUrl] = useState<string>('');
+  const [baseBranch, setBaseBranch] = useState<string>('');
+  const [compareBranch, setCompareBranch] = useState<string>('');
+  const [changeSpec, setChangeSpec] = useState<string>('');
+
+  // Branch detection state
+  const [availableBranches, setAvailableBranches] = useState<string[]>([]);
   const [isDetectingBranch, setIsDetectingBranch] = useState<boolean>(false);
   const [detectedBranchInfo, setDetectedBranchInfo] = useState<{
     isFallback?: boolean;
     error?: string;
   } | null>(null);
+
+  const {
+    stage,
+    commitSha,
+    error,
+    setError,
+    history,
+    setHistory,
+    logs,
+    setLogs,
+    reports,
+    showReportModal,
+    setShowReportModal,
+    isReviewRunning,
+    resetForNewReview,
+  } = useReviewState(mode, setBranch, setCompareBranch);
 
   // Load initial repo history
   useEffect(() => {
@@ -37,8 +53,12 @@ export const App: React.FC = () => {
           const items = await window.api.getHistory();
           setHistory(items);
           if (items.length > 0) {
-            setGitUrl((prev) => prev || items[0].gitUrl);
+            const initialUrl = items[0].gitUrl;
+            setGitUrl((prev) => prev || initialUrl);
             setBranch((prev) => prev || items[0].lastBranch);
+            setDiffGitUrl((prev) => prev || initialUrl);
+            setCompareBranch((prev) => prev || items[0].lastBranch);
+            handleUrlBlurOrSelect(initialUrl, mode);
           }
         }
       } catch (err) {
@@ -48,51 +68,38 @@ export const App: React.FC = () => {
     loadHistory();
   }, []);
 
-  // Subscribe to IPC state updates and log entries
-  useEffect(() => {
-    if (!window.api) return;
-
-    const unsubscribeState = window.api.onStateUpdate((update: ReviewStateUpdate) => {
-      setStage(update.stage);
-      if (update.branch) setBranch(update.branch);
-      if (update.commitSha) setCommitSha(update.commitSha);
-      if (update.error) setError(update.error);
-
-      if (update.stage === 'completed' && update.commitSha) {
-        window.api.getReports(update.commitSha).then((res) => {
-          setReports(res);
-          setShowReportModal(true);
-        });
-        // Refresh history list
-        window.api.getHistory().then(setHistory);
-      }
-    });
-
-    const unsubscribeLog = window.api.onLogEntry((log: LogEntry) => {
-      setLogs((prev) => [...prev, log]);
-    });
-
-    return () => {
-      unsubscribeState();
-      unsubscribeLog();
-    };
-  }, []);
-
-  // Handle URL blur / history selection to detect remote default branch
-  const handleUrlBlurOrSelect = async (url: string) => {
+  // Handle URL blur / history selection to detect remote default branch and available branches
+  const handleUrlBlurOrSelect = async (url: string, targetMode: ReviewMode = mode) => {
     if (!url || !url.trim() || !window.api) return;
     setIsDetectingBranch(true);
     setDetectedBranchInfo(null);
 
     try {
-      const res = await window.api.detectBranch(url.trim());
+      const [detectRes, branchesRes] = await Promise.all([
+        window.api.detectBranch(url.trim()),
+        window.api.getBranches ? window.api.getBranches(url.trim()) : Promise.resolve({ success: false, branches: [] }),
+      ]);
+
       setIsDetectingBranch(false);
 
-      if (res.success && res.branch) {
-        setBranch(res.branch);
-        setDetectedBranchInfo({ isFallback: res.isFallback });
+      if (branchesRes.success && branchesRes.branches.length > 0) {
+        setAvailableBranches(branchesRes.branches);
       } else {
-        setDetectedBranchInfo({ isFallback: true, error: res.error });
+        setAvailableBranches([]);
+      }
+
+      if (detectRes.success && detectRes.branch) {
+        if (targetMode === 'single') {
+          setBranch(detectRes.branch);
+        } else {
+          setBaseBranch(detectRes.branch);
+        }
+        setDetectedBranchInfo({ isFallback: detectRes.isFallback });
+      } else {
+        const defaultBranch = branchesRes.branches?.[0] || 'main';
+        if (targetMode === 'single') setBranch(defaultBranch);
+        else setBaseBranch(defaultBranch);
+        setDetectedBranchInfo({ isFallback: true, error: detectRes.error });
       }
     } catch (err: unknown) {
       setIsDetectingBranch(false);
@@ -103,15 +110,19 @@ export const App: React.FC = () => {
     }
   };
 
-  // Start review trigger
+  const handleModeSwitch = (newMode: ReviewMode) => {
+    if (isReviewRunning) return;
+    setMode(newMode);
+    const targetUrl = newMode === 'diff' ? (diffGitUrl || gitUrl) : (gitUrl || diffGitUrl);
+    if (targetUrl) {
+      handleUrlBlurOrSelect(targetUrl, newMode);
+    }
+  };
+
+  // Flow 1 Start review trigger
   const handleStartReview = async () => {
     if (!gitUrl.trim() || !branch.trim() || !window.api) return;
-
-    setError(undefined);
-    setReports([]);
-    setLogs([]);
-    setShowReportModal(false);
-    setStage('fetching');
+    resetForNewReview();
 
     const res = await window.api.startReview({
       gitUrl: gitUrl.trim(),
@@ -120,6 +131,23 @@ export const App: React.FC = () => {
 
     if (!res.success) {
       setError(res.error || 'Failed to start review process');
+    }
+  };
+
+  // Flow 2 Start diff review trigger
+  const handleStartDiffReview = async () => {
+    if (!diffGitUrl.trim() || !baseBranch.trim() || !compareBranch.trim() || !window.api) return;
+    resetForNewReview();
+
+    const res = await window.api.startDiffReview({
+      gitUrl: diffGitUrl.trim(),
+      baseBranch: baseBranch.trim(),
+      compareBranch: compareBranch.trim(),
+      changeSpec: changeSpec.trim(),
+    });
+
+    if (!res.success) {
+      setError(res.error || 'Failed to start diff review process');
     }
   };
 
@@ -132,7 +160,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* App Header */}
+      {/* App Header & Mode Switcher */}
       <header className="app-header">
         <div className="app-title-group">
           <div className="app-logo">
@@ -140,31 +168,73 @@ export const App: React.FC = () => {
           </div>
           <div>
             <h1 className="app-title">Code Review App</h1>
-            <p className="app-subtitle">Phase 1 Single Repository Automated Review Suite</p>
+            <p className="app-subtitle">
+              {mode === 'single'
+                ? 'Single Repository Automated Review Suite'
+                : 'PR & Branch Diff Review Suite against Change Spec'}
+            </p>
           </div>
+        </div>
+
+        {/* Mode Switcher Tabs */}
+        <div className="mode-switcher">
+          <button
+            type="button"
+            className={`mode-tab ${mode === 'single' ? 'active' : ''}`}
+            onClick={() => handleModeSwitch('single')}
+            disabled={isReviewRunning}
+          >
+            <Code2 size={16} />
+            <span>Single Repo Review</span>
+          </button>
+          <button
+            type="button"
+            className={`mode-tab ${mode === 'diff' ? 'active' : ''}`}
+            onClick={() => handleModeSwitch('diff')}
+            disabled={isReviewRunning}
+          >
+            <GitCompare size={16} />
+            <span>PR & Diff Review</span>
+          </button>
         </div>
       </header>
 
-      {/* Input Form */}
-      <RepoInputForm
-        gitUrl={gitUrl}
-        setGitUrl={setGitUrl}
-        branch={branch}
-        setBranch={setBranch}
-        history={history}
-        onStartReview={handleStartReview}
-        isDetectingBranch={isDetectingBranch}
-        isReviewRunning={
-          stage === 'fetching' ||
-          stage === 'installing' ||
-          stage === 'staging' ||
-          stage === 'running'
-        }
-        detectedBranchInfo={detectedBranchInfo}
-        onUrlBlurOrSelect={handleUrlBlurOrSelect}
-      />
+      {/* Input Form based on Active Mode */}
+      {mode === 'single' ? (
+        <RepoInputForm
+          gitUrl={gitUrl}
+          setGitUrl={setGitUrl}
+          branch={branch}
+          setBranch={setBranch}
+          history={history}
+          availableBranches={availableBranches}
+          onStartReview={handleStartReview}
+          isDetectingBranch={isDetectingBranch}
+          isReviewRunning={isReviewRunning}
+          detectedBranchInfo={detectedBranchInfo}
+          onUrlBlurOrSelect={(url) => handleUrlBlurOrSelect(url, 'single')}
+        />
+      ) : (
+        <DiffInputForm
+          gitUrl={diffGitUrl}
+          setGitUrl={setDiffGitUrl}
+          baseBranch={baseBranch}
+          setBaseBranch={setBaseBranch}
+          compareBranch={compareBranch}
+          setCompareBranch={setCompareBranch}
+          changeSpec={changeSpec}
+          setChangeSpec={setChangeSpec}
+          history={history}
+          availableBranches={availableBranches}
+          onStartDiffReview={handleStartDiffReview}
+          isDetectingBranch={isDetectingBranch}
+          isReviewRunning={isReviewRunning}
+          detectedBranchInfo={detectedBranchInfo}
+          onUrlBlurOrSelect={(url) => handleUrlBlurOrSelect(url, 'diff')}
+        />
+      )}
 
-      {/* Pipeline Status Indicator */}
+      {/* Pipeline Status Indicator (Reused 1:1) */}
       <StatusTimeline
         stage={stage}
         commitSha={commitSha}
@@ -173,7 +243,7 @@ export const App: React.FC = () => {
         onOpenReport={() => setShowReportModal(true)}
       />
 
-      {/* Full Width Log Console */}
+      {/* Full Width Log Console (Reused 1:1) */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, width: '100%' }}>
         <LogConsole
           logs={logs}
@@ -183,7 +253,7 @@ export const App: React.FC = () => {
         />
       </div>
 
-      {/* Full-Screen Report Lightbox Modal */}
+      {/* Full-Screen Report Lightbox Modal (Reused 1:1) */}
       <ReportViewer
         reports={reports}
         isOpen={showReportModal}

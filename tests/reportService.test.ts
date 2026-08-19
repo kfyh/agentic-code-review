@@ -55,6 +55,24 @@ describe('ReportService', () => {
     expect(packageNames).not.toContain('README');
   });
 
+  test('loads review.md from diff-<commitSha> staging directory', async () => {
+    const diffStagedDir = path.join(customStagingBase, `diff-${mockCommitSha}`);
+    const reportsDir = path.join(diffStagedDir, 'reports');
+    fs.mkdirSync(reportsDir, { recursive: true });
+    fs.writeFileSync(path.join(reportsDir, 'review.md'), '# PR Diff Review Report\n\nExecutive Summary');
+
+    // Query with plain commitSha
+    const reports = await reportService.getReports(mockCommitSha);
+    expect(reports.length).toBe(1);
+    expect(reports[0].packageName).toBe('review');
+    expect(reports[0].content).toContain('# PR Diff Review Report');
+
+    // Query with diff- prefixed commitSha
+    const diffReports = await reportService.getReports(`diff-${mockCommitSha}`);
+    expect(diffReports.length).toBe(1);
+    expect(diffReports[0].packageName).toBe('review');
+  });
+
   test('returns empty array if staged directory does not exist', async () => {
     const reports = await reportService.getReports('non_existent_sha_123');
     expect(reports).toEqual([]);
@@ -95,9 +113,28 @@ describe('ReportService', () => {
     );
     expect(extracted).toBe(true);
 
-    const reportPath = path.join(stagedDir, 'reports', 'code_smells.md');
+    const reportPath = path.join(stagedDir, 'reports', 'review.md');
     expect(fs.existsSync(reportPath)).toBe(true);
     expect(fs.readFileSync(reportPath, 'utf-8')).toContain('# Code Smell Analysis');
+  });
+
+  test('extractReportFromStdout dynamically targets review.md for diff staging directory', () => {
+    const diffStagedDir = path.join(customStagingBase, `diff-${mockCommitSha}`);
+    fs.mkdirSync(diffStagedDir, { recursive: true });
+
+    const stdoutLines = [
+      '# PR & Diff Review Report',
+      '## 1. Executive Summary',
+      'Specification compliance verified',
+      '🏁 Session Finished',
+    ];
+
+    const extracted = reportService.extractReportFromStdout(stdoutLines, diffStagedDir);
+    expect(extracted).toBe(true);
+
+    const reportPath = path.join(diffStagedDir, 'reports', 'review.md');
+    expect(fs.existsSync(reportPath)).toBe(true);
+    expect(fs.readFileSync(reportPath, 'utf-8')).toContain('# PR & Diff Review Report');
   });
 
   test('extractReportFromStdout returns true if existing valid report files already present', () => {

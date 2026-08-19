@@ -133,4 +133,109 @@ describe('ReviewPipelineRunner', () => {
     expect(res.error).toBe('Git clone failed');
     expect(stateUpdates[stateUpdates.length - 1].stage).toBe('failed');
   });
+
+  describe('executeDiffPipeline', () => {
+    beforeEach(() => {
+      (mockGitService as Record<string, unknown>).prepareDiffGitWorkspace = jest
+        .fn()
+        .mockResolvedValue({
+          baseCommitSha: '1111111111111111111111111111111111111111',
+          compareCommitSha: '2222222222222222222222222222222222222222',
+          workspaceDir: '/tmp/workspace/diff-2222222222222222222222222222222222222222',
+        });
+      (mockStagingService as Record<string, unknown>).prepareDiffStagingWorkspace = jest
+        .fn()
+        .mockReturnValue({
+          stagedDir: '/tmp/staged/diff-2222222222222222222222222222222222222222',
+          contextJsonPath:
+            '/tmp/staged/diff-2222222222222222222222222222222222222222/context.json',
+        });
+    });
+
+    test('validates required arguments for diff pipeline', async () => {
+      const onStateUpdate = jest.fn();
+      const onLogEntry = jest.fn();
+
+      const r1 = await runner.executeDiffPipeline(
+        { gitUrl: '', baseBranch: 'main', compareBranch: 'feature', changeSpec: '' },
+        onStateUpdate,
+        onLogEntry
+      );
+      expect(r1.success).toBe(false);
+      expect(r1.error).toBe('Git URL is required');
+
+      const r2 = await runner.executeDiffPipeline(
+        { gitUrl: 'git@github.com:org/repo.git', baseBranch: '', compareBranch: 'feature', changeSpec: '' },
+        onStateUpdate,
+        onLogEntry
+      );
+      expect(r2.success).toBe(false);
+      expect(r2.error).toBe('Base branch name is required');
+
+      const r3 = await runner.executeDiffPipeline(
+        { gitUrl: 'git@github.com:org/repo.git', baseBranch: 'main', compareBranch: '', changeSpec: '' },
+        onStateUpdate,
+        onLogEntry
+      );
+      expect(r3.success).toBe(false);
+      expect(r3.error).toBe('Compare branch name is required');
+    });
+
+    test('executes full diff pipeline successfully through all stages', async () => {
+      const stateUpdates: ReviewStateUpdate[] = [];
+      const logs: LogEntry[] = [];
+
+      const res = await runner.executeDiffPipeline(
+        {
+          gitUrl: 'git@github.com:org/repo.git',
+          baseBranch: 'main',
+          compareBranch: 'feature/pr-1',
+          changeSpec: 'Feature spec requirements',
+        },
+        (u) => stateUpdates.push(u),
+        (l) => logs.push(l)
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.commitSha).toBe('2222222222222222222222222222222222222222');
+
+      const stages = stateUpdates.map((u) => u.stage);
+      expect(stages).toEqual(['fetching', 'installing', 'staging', 'running', 'completed']);
+      expect(mockHistoryService.addOrUpdateHistory).toHaveBeenCalledTimes(1);
+    });
+
+    test('handles diff agent execution failure and abortion', async () => {
+      mockAgentInvoker.runAgent.mockResolvedValueOnce({ success: false, aborted: true });
+      const stateUpdates: ReviewStateUpdate[] = [];
+
+      const abortRes = await runner.executeDiffPipeline(
+        {
+          gitUrl: 'git@github.com:org/repo.git',
+          baseBranch: 'main',
+          compareBranch: 'feature/pr-1',
+          changeSpec: '',
+        },
+        (u) => stateUpdates.push(u),
+        jest.fn()
+      );
+      expect(abortRes.success).toBe(false);
+      expect(abortRes.error).toBe('Aborted');
+      expect(stateUpdates[stateUpdates.length - 1].stage).toBe('aborted');
+
+      mockAgentInvoker.runAgent.mockResolvedValueOnce({ success: false, error: 'Agent crash' });
+      const failRes = await runner.executeDiffPipeline(
+        {
+          gitUrl: 'git@github.com:org/repo.git',
+          baseBranch: 'main',
+          compareBranch: 'feature/pr-1',
+          changeSpec: '',
+        },
+        (u) => stateUpdates.push(u),
+        jest.fn()
+      );
+      expect(failRes.success).toBe(false);
+      expect(failRes.error).toBe('Agent crash');
+      expect(stateUpdates[stateUpdates.length - 1].stage).toBe('failed');
+    });
+  });
 });

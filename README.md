@@ -139,9 +139,9 @@ All execution occurs inside non-root container sandboxes with dropped privileges
 
 ### 4. Customisable Prompt Architecture
 
-- Built on a comprehensive code review prompt template ([`code-review-prompt.md`](file:///workspace/code-review-prompt.md)).
+- Built on a comprehensive code review prompt template ([`src/prompts/code-review-prompt.md`](file:///workspace/src/prompts/code-review-prompt.md)).
 - Mandates AST-based tool execution (`madge`, `dpdm`, `dependency-cruiser`, `ts-morph`) rather than relying on LLM token prediction alone.
-- **Prompt Customisation Note**: While the code review prompt template can currently be modified on disk via [`code-review-prompt.md`](file:///workspace/code-review-prompt.md), **there are future plans to allow users to edit, customise, and manage prompts directly within the application**.
+- **Prompt Customisation Note**: While the code review prompt template can currently be modified on disk via [`src/prompts/code-review-prompt.md`](file:///workspace/src/prompts/code-review-prompt.md), **there are future plans to allow users to edit, customise, and manage prompts directly within the application**.
 
 ---
 

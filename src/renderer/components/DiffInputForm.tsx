@@ -1,31 +1,39 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { HistoryEntry } from '../../shared/types';
-import { History, Play, GitBranch, RefreshCw, AlertCircle, Folder } from 'lucide-react';
+import { History, Play, GitBranch, RefreshCw, AlertCircle, Folder, FileText, GitCompare } from 'lucide-react';
 import { BranchBadgeList } from './BranchBadgeList';
 import { HistoryDropdownMenu } from './HistoryDropdownMenu';
 
-interface RepoInputFormProps {
+interface DiffInputFormProps {
   gitUrl: string;
   setGitUrl: (url: string) => void;
-  branch: string;
-  setBranch: (branch: string) => void;
+  baseBranch: string;
+  setBaseBranch: (branch: string) => void;
+  compareBranch: string;
+  setCompareBranch: (branch: string) => void;
+  changeSpec: string;
+  setChangeSpec: (spec: string) => void;
   history: HistoryEntry[];
   availableBranches?: string[];
-  onStartReview: () => void;
+  onStartDiffReview: () => void;
   isDetectingBranch: boolean;
   isReviewRunning: boolean;
   detectedBranchInfo: { isFallback?: boolean; error?: string } | null;
   onUrlBlurOrSelect: (url: string) => void;
 }
 
-export const RepoInputForm: React.FC<RepoInputFormProps> = ({
+export const DiffInputForm: React.FC<DiffInputFormProps> = ({
   gitUrl,
   setGitUrl,
-  branch,
-  setBranch,
+  baseBranch,
+  setBaseBranch,
+  compareBranch,
+  setCompareBranch,
+  changeSpec,
+  setChangeSpec,
   history,
   availableBranches = [],
-  onStartReview,
+  onStartDiffReview,
   isDetectingBranch,
   isReviewRunning,
   detectedBranchInfo,
@@ -62,7 +70,7 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
 
   const handleSelectHistoryItem = (item: HistoryEntry) => {
     setGitUrl(item.gitUrl);
-    setBranch(item.lastBranch);
+    setCompareBranch(item.lastBranch);
     setShowHistoryDropdown(false);
     onUrlBlurOrSelect(item.gitUrl);
   };
@@ -109,7 +117,7 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
         </span>
       );
     }
-    if (branch) {
+    if (baseBranch) {
       return (
         <span className="field-hint" style={{ color: 'var(--status-success)' }}>
           Auto-detected
@@ -120,7 +128,11 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
   };
 
   const isSubmitDisabled =
-    isReviewRunning || !gitUrl.trim() || !branch.trim() || isDetectingBranch;
+    isReviewRunning ||
+    !gitUrl.trim() ||
+    !baseBranch.trim() ||
+    !compareBranch.trim() ||
+    isDetectingBranch;
 
   return (
     <div className="glass-panel">
@@ -128,13 +140,13 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
         onSubmit={(e) => {
           e.preventDefault();
           if (!isSubmitDisabled) {
-            onStartReview();
+            onStartDiffReview();
           }
         }}
         className="form-grid"
       >
         {/* Git Repository URL Input */}
-        <div className="field-group" ref={dropdownRef}>
+        <div className="field-group" ref={dropdownRef} style={{ gridColumn: '1 / -1' }}>
           <label className="field-label">
             <span>Git Repository URL (SSH)</span>
             {history.length > 0 && (
@@ -178,11 +190,20 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
           )}
         </div>
 
-        {/* Target Branch Name Input */}
+        {/* Shared Datalist for Available Branches */}
+        {availableBranches.length > 0 && (
+          <datalist id="diff-branch-list">
+            {availableBranches.map((b) => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
+        )}
+
+        {/* Base Branch Input */}
         <div className="field-group">
           <label className="field-label">
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <GitBranch size={14} /> Branch Name
+              <GitBranch size={14} /> Base Branch (Target)
             </span>
             {renderBranchStatusHint()}
           </label>
@@ -191,25 +212,64 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
               type="text"
               className="text-input"
               placeholder="main"
-              list="repo-branch-list"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
+              list="diff-branch-list"
+              value={baseBranch}
+              onChange={(e) => setBaseBranch(e.target.value)}
               disabled={isReviewRunning}
               required
             />
-            {availableBranches.length > 0 && (
-              <datalist id="repo-branch-list">
-                {availableBranches.map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
-            )}
           </div>
           <BranchBadgeList
-            label="Available"
+            label="Select Base"
             branches={availableBranches}
-            selectedBranch={branch}
-            onSelectBranch={setBranch}
+            selectedBranch={baseBranch}
+            onSelectBranch={setBaseBranch}
+            disabled={isReviewRunning}
+          />
+        </div>
+
+        {/* Compare Branch Input */}
+        <div className="field-group">
+          <label className="field-label">
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <GitCompare size={14} /> Compare Branch (Feature/PR)
+            </span>
+            <span className="field-hint">Feature or PR branch to evaluate</span>
+          </label>
+          <div className="input-wrapper">
+            <input
+              type="text"
+              className="text-input"
+              placeholder="feature/JIRA-1234"
+              list="diff-branch-list"
+              value={compareBranch}
+              onChange={(e) => setCompareBranch(e.target.value)}
+              disabled={isReviewRunning}
+              required
+            />
+          </div>
+          <BranchBadgeList
+            label="Select Compare"
+            branches={availableBranches}
+            selectedBranch={compareBranch}
+            onSelectBranch={setCompareBranch}
+            disabled={isReviewRunning}
+          />
+        </div>
+
+        {/* Change Specification TextArea */}
+        <div className="field-group" style={{ gridColumn: '1 / -1' }}>
+          <label className="field-label">
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <FileText size={14} /> Change Specification (JIRA Description / PR Specs)
+            </span>
+            <span className="field-hint">User requirement, JIRA ticket details, or acceptance criteria</span>
+          </label>
+          <textarea
+            className="textarea-input"
+            placeholder="e.g. JIRA-1234: Add retry mechanism and rate-limiting to API client..."
+            value={changeSpec}
+            onChange={(e) => setChangeSpec(e.target.value)}
             disabled={isReviewRunning}
           />
         </div>
@@ -235,14 +295,14 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
           </div>
         </div>
 
-        {/* Start Review Trigger */}
+        {/* Start Diff Review Trigger */}
         <button
           type="submit"
           className="btn-primary"
           disabled={isSubmitDisabled}
         >
           <Play size={16} />
-          <span>{isReviewRunning ? 'Review in Progress...' : 'Start Code Review'}</span>
+          <span>{isReviewRunning ? 'Diff Review in Progress...' : 'Start Diff Review'}</span>
         </button>
       </form>
     </div>

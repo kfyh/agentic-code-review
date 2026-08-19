@@ -64,6 +64,21 @@ describe('GitService', () => {
     expect(res.isFallback).toBe(false);
   });
 
+  test('parses remote branch list from git ls-remote --heads', async () => {
+    mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
+      const callback = typeof opts === 'function' ? (opts as ExecCallback) : (cb as ExecCallback);
+      callback(
+        null,
+        'sha1\trefs/heads/feature/JIRA-1\nsha2\trefs/heads/main\nsha3\trefs/heads/develop\n',
+        ''
+      );
+    });
+
+    const res = await gitService.getRemoteBranches('git@github.com:org/repo.git');
+    expect(res.success).toBe(true);
+    expect(res.branches).toEqual(['main', 'develop', 'feature/JIRA-1']);
+  });
+
   test('prepares git workspace by cloning, checking out branch, and resolving SHA', async () => {
     const logs: string[] = [];
     const validSha = '84923bd151f6d5d77dd19392667a1c34f476ebaa';
@@ -145,5 +160,40 @@ describe('GitService', () => {
     ).rejects.toThrow();
 
     expect(logs.some((l) => l.includes('SSH Authentication failed'))).toBe(true);
+  });
+
+  test('prepares diff git workspace exporting base and compare subtrees and generating diff.patch', async () => {
+    const logs: string[] = [];
+    const baseSha = '1111111111111111111111111111111111111111';
+    const compareSha = '2222222222222222222222222222222222222222';
+    let revParseCount = 0;
+
+    mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
+      const callback = typeof opts === 'function' ? (opts as ExecCallback) : (cb as ExecCallback);
+      if (cmd.includes('rev-parse HEAD')) {
+        revParseCount++;
+        callback(null, revParseCount === 1 ? `${baseSha}\n` : `${compareSha}\n`, '');
+      } else if (cmd.includes('diff ')) {
+        callback(null, 'diff --git a/file.ts b/file.ts\n+added line\n', '');
+      } else {
+        callback(null, 'ok', '');
+      }
+    });
+
+    const res = await gitService.prepareDiffGitWorkspace(
+      'git@github.com:org/repo.git',
+      'main',
+      'feature/pr-1',
+      (l) => logs.push(l.message)
+    );
+
+    expect(res.baseCommitSha).toBe(baseSha);
+    expect(res.compareCommitSha).toBe(compareSha);
+    expect(res.workspaceDir).toContain(`diff-${compareSha}`);
+    expect(fs.existsSync(res.diffPatchPath)).toBe(true);
+    expect(fs.readFileSync(res.diffPatchPath, 'utf-8')).toContain('diff --git');
+    expect(logs.some((l) => l.includes('Base Branch: main | Compare Branch: feature/pr-1'))).toBe(
+      true
+    );
   });
 });

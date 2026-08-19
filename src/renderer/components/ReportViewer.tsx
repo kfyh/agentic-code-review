@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { ReviewReport } from '../../shared/types';
-import { FileText, X, FileCode, CheckCircle2 } from 'lucide-react';
+import { FileText, X, FileCode, CheckCircle2, Download, Copy, Check } from 'lucide-react';
 
 interface ReportViewerProps {
   reports: ReviewReport[];
@@ -12,6 +12,7 @@ interface ReportViewerProps {
 
 export const ReportViewer: React.FC<ReportViewerProps> = ({ reports, isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<number>(0);
+  const [copied, setCopied] = useState<boolean>(false);
 
   // Handle Escape key press to dismiss modal
   useEffect(() => {
@@ -27,6 +28,33 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reports, isOpen, onC
   if (!isOpen) return null;
 
   const currentReport = reports[activeTab] || reports[0];
+
+  const handleDownload = () => {
+    if (!currentReport || !currentReport.content) return;
+    const blob = new Blob([currentReport.content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const fileName = currentReport.packageName.endsWith('.md')
+      ? currentReport.packageName
+      : `${currentReport.packageName}.md`;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopy = async () => {
+    if (!currentReport || !currentReport.content) return;
+    try {
+      await navigator.clipboard.writeText(currentReport.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy report to clipboard:', err);
+    }
+  };
 
   const renderSanitizedMarkdown = (content: string) => {
     try {
@@ -53,7 +81,34 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reports, isOpen, onC
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            {reports.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  onClick={handleCopy}
+                  title="Copy Markdown to Clipboard"
+                >
+                  {copied ? <Check size={14} style={{ color: 'var(--status-success)' }} /> : <Copy size={14} />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  onClick={handleDownload}
+                  title="Save / Download Markdown File"
+                  style={{
+                    background: 'var(--accent-cyan-subtle)',
+                    borderColor: 'var(--accent-cyan)',
+                    color: 'var(--accent-cyan)',
+                  }}
+                >
+                  <Download size={14} />
+                  <span>Download</span>
+                </button>
+              </>
+            )}
             <button className="modal-close-btn" onClick={onClose} title="Close Lightbox (Esc)">
               <X size={18} />
             </button>
