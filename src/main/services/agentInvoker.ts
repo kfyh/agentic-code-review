@@ -1,5 +1,7 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { injectable, inject } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
 import { isError } from '../../shared/typeGuards';
@@ -8,6 +10,11 @@ import { ReportService } from './reportService';
 
 @injectable()
 export class AgentInvoker {
+  private static readonly PLATFORM_DEFAULT_SHELLS: Record<string, string> = {
+    darwin: '/bin/zsh',
+    linux: '/bin/bash',
+  };
+
   private activeProcess: ChildProcess | null = null;
   private isAborted: boolean = false;
 
@@ -52,7 +59,16 @@ export class AgentInvoker {
       }
     }
 
-    log(`[AGENT] Shell environment check for 'run-agent'...`);
+    let shell: string;
+    try {
+      shell = this.resolveLoginShell();
+    } catch (err: unknown) {
+      const msg = isError(err) ? err.message : String(err);
+      log(`[AGENT ERROR] ${msg}`, 'stderr');
+      return { success: false, error: msg };
+    }
+
+    log(`[AGENT] Shell environment check for 'run-agent' (shell: ${shell})...`);
     const runAgentCmd = `run-agent . -p ${this.escapeShellArg(promptContent)}`;
 
     log(`[AGENT] Spawning subprocess: run-agent . -p ... (working dir: ${stagedDir})`);
@@ -60,8 +76,9 @@ export class AgentInvoker {
     const stdoutLines: string[] = [];
 
     return new Promise((resolve) => {
-      // Execute through login/interactive shell inside stagedDir
-      const child = spawn('/bin/bash', ['-i', '-c', runAgentCmd], {
+      // Interactive shell (-i) so the user's rc file is sourced; `run-agent` is
+      // expected to be an alias, which only exists in interactive shell state.
+      const child = spawn(shell, ['-i', '-c', runAgentCmd], {
         cwd: stagedDir,
         env: { ...process.env, FORCE_COLOR: '1' },
       });
@@ -85,7 +102,7 @@ export class AgentInvoker {
             // Check for missing alias/command notice
             if (line.includes('command not found') || line.includes('run-agent: not found')) {
               log(
-                `[AGENT WARNING] 'run-agent' command or shell alias was not found in environment PATH. Ensure agentflow or run-agent is installed and aliased.`,
+                `[AGENT WARNING] 'run-agent' was not found by ${shell}. Define it as an alias in ${this.rcFileHint(shell)}, or set AGENT_SHELL to the shell whose startup file declares it.`,
                 'stderr'
               );
             }
@@ -134,6 +151,57 @@ export class AgentInvoker {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Resolves the shell whose startup file declares the `run-agent` alias.
+   *
+   * `os.userInfo().shell` reads the passwd / directory-service record, so it is
+   * correct even when the app is launched from Finder or a desktop launcher,
+   * where the process environment carries no SHELL and only a minimal PATH.
+   * `process.env.SHELL` and the platform default are fallbacks for hosts with no
+   * passwd entry, such as some containers.
+   */
+  private resolveLoginShell(): string {
+    const override = process.env.AGENT_SHELL;
+    if (override) {
+      return override;
+    }
+
+    if (process.platform === 'win32') {
+      throw new Error(
+        "Unsupported platform: 'run-agent' is resolved through a login shell alias, which has no Windows equivalent. Set AGENT_SHELL to a POSIX shell path to override."
+      );
+    }
+
+    try {
+      const { shell } = os.userInfo();
+      if (shell) {
+        return shell;
+      }
+    } catch {
+      // No passwd entry for this uid; fall through to the environment.
+    }
+
+    return process.env.SHELL || AgentInvoker.PLATFORM_DEFAULT_SHELLS[process.platform] || '/bin/sh';
+  }
+
+  /**
+   * Startup file the given shell sources for interactive sessions, used to make
+   * the missing-alias warning actionable.
+   */
+  private rcFileHint(shell: string): string {
+    const name = path.basename(shell);
+    switch (name) {
+      case 'zsh':
+        return '~/.zshrc';
+      case 'bash':
+        return '~/.bashrc';
+      case 'fish':
+        return '~/.config/fish/config.fish';
+      default:
+        return `your ${name} startup file`;
+    }
   }
 
   private escapeShellArg(arg: string): string {

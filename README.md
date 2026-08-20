@@ -166,7 +166,18 @@ The threat model focuses primarily on **host integrity and source safety** rathe
 
 ## Prerequisites
 
-- **`run-agent` Command / Alias**: The `run-agent` terminal command (or shell alias) must be available and executable from your terminal path.
+- **`run-agent` Command / Alias**: `run-agent` must resolve in your **login shell's interactive startup file** — `~/.zshrc` on macOS, `~/.bashrc` on most Linux distributions. It is invoked via `<shell> -i -c`, so a shell alias is supported (and is the intended way to select your provider); a real executable on `PATH` works too.
+
+  The shell is resolved from your passwd record (`os.userInfo().shell`), falling back to `$SHELL` and then a platform default. Set `AGENT_SHELL` to override — useful if your aliases live in a shell other than your login shell.
+
+  Aliases may chain, and arguments are appended, so a provider-selecting chain resolves correctly:
+
+  ```bash
+  # ~/.zshrc
+  alias run-ai-agent='/path/to/agentflow/run-agent.sh'
+  alias run-claude-agent='run-ai-agent -c claude'
+  alias run-agent='run-claude-agent'
+  ```
 - For container runtime setup, engine image builds (Claude, Gemini, Mistral), and credential authentication, see **[agentflow](https://github.com/kfyh/agentflow)**.
 
 ---
@@ -175,15 +186,17 @@ The threat model focuses primarily on **host integrity and source safety** rathe
 
 ### 1. Development Mode
 
-Run the Electron main, preload, and Vite renderer in development mode:
+`npm run dev` builds the main and preload bundles once, then starts the Vite dev server on port 3000 with hot reloading for the renderer. It does **not** launch Electron:
 
 ```bash
 # Install dependencies
 npm install
 
-# Start development server and Electron app
+# Build main/preload bundles and start the Vite dev server
 npm run dev
 ```
+
+Opening `http://localhost:3000` in a browser renders the UI, but anything behind IPC — repository browsing, agent invocation — is unavailable, since `window.electronAPI` only exists inside Electron. Use `npm run start` to exercise those paths.
 
 ### 2. Build & Run Locally
 
@@ -199,9 +212,15 @@ npx electron .
 npm run start
 ```
 
+> **macOS note**: the prebuilt Electron binary is only linker-signed, so Gatekeeper blocks it as revoked and offers "Move to Trash" — which deletes it from `node_modules`. The `postinstall` hook ad-hoc signs the bundle to prevent this. If `npm run start` is still blocked, re-run it manually:
+>
+> ```bash
+> codesign --force --deep --sign - node_modules/electron/dist/Electron.app
+> ```
+
 ### 3. Packaging Standalone Desktop Executable
 
-To generate a standalone desktop executable/binary (e.g., `AppImage` / executable binary on Linux, `.dmg` on macOS, `.exe` on Windows):
+To generate a standalone desktop executable. Note that the `build` configuration in `package.json` currently declares **Linux targets only** (`AppImage` and `dir`); producing a `.dmg` or `.exe` requires adding the corresponding `mac` or `win` target first:
 
 ```bash
 # Build desktop executable (outputs to release/ directory)
@@ -215,11 +234,12 @@ npm run pack
 
 ## Available NPM Scripts
 
-- `npm run dev`: Launch Vite dev server and esbuild watchers for Electron development.
+- `npm run dev`: Build main and preload bundles, then serve the renderer via Vite on port 3000. Does not launch Electron.
 - `npm run start`: Build main, preload, and renderer assets and start Electron process.
 - `npm run build`: Build production bundles for main, preload, and renderer processes.
 - `npm run pack`: Create unpacked desktop executable directory under `release/`.
-- `npm run dist`: Package standalone executable distributions under `release/`.
+- `npm run dist`: Package standalone executable distributions under `release/` (Linux targets only, as configured).
+- `postinstall`: Ad-hoc signs the prebuilt Electron binary on macOS so Gatekeeper permits it. No-op on other platforms.
 - `npm run test`: Execute Jest unit test suite.
 - `npm run typecheck`: Perform TypeScript type checking (`tsc --noEmit`).
 - `npm run lint`: Run ESLint across the codebase.

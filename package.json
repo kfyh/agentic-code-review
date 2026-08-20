@@ -4,6 +4,7 @@
   "description": "Desktop Application for Single Repository Code Review",
   "main": "dist/main/index.js",
   "scripts": {
+    "postinstall": "node scripts/fix-electron-signature.mjs",
     "dev": "npm run build:main && npm run build:preload && vite",
     "start": "npm run build && electron .",
     "build:main": "esbuild src/main/index.ts --bundle --platform=node --target=node20 --outfile=dist/main/index.js --external:electron",
