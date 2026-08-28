@@ -184,25 +184,23 @@ export class GitService {
       }
     }
 
-    log(`[GIT] Checking out branch ${cleanBranch}...`);
+    log(`[GIT] Fetching and checking out origin/${cleanBranch}...`);
     try {
-      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
-    } catch {
-      log(`[GIT] Fetching and checking out origin/${cleanBranch}...`);
       await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanBranch)} origin/${this.escapeShellArg(cleanBranch)}`,
         cacheDir,
         log
       );
-    }
-
-    log(`[GIT] Syncing with origin/${cleanBranch}...`);
-    try {
-      await this.runGitCommand(`pull origin ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
-    } catch (err: unknown) {
-      const msg = isError(err) ? err.message : String(err);
-      log(`[GIT] Pull notice (using current head state): ${msg}`);
+      await this.runGitCommand(
+        `reset --hard origin/${this.escapeShellArg(cleanBranch)}`,
+        cacheDir,
+        log
+      );
+      await this.runGitCommand(`clean -fdx`, cacheDir, log);
+    } catch {
+      log(`[GIT] Remote checkout failed, attempting local checkout of ${cleanBranch}...`);
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
     }
 
     log(`[GIT] Resolving commit SHA...`);

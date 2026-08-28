@@ -103,16 +103,14 @@ describe('GitService', () => {
     expect(logs.length).toBeGreaterThan(0);
   });
 
-  test('handles checkout fallback and pull notice when checkout or pull fails', async () => {
+  test('handles remote checkout failure with local checkout fallback', async () => {
     const logs: string[] = [];
     const validSha = '84923bd151f6d5d77dd19392667a1c34f476ebaa';
 
     mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
       const callback = typeof opts === 'function' ? (opts as ExecCallback) : (cb as ExecCallback);
-      if (cmd.includes('checkout') && !cmd.includes('origin')) {
-        callback(new Error('pathspec main did not match any file(s)'), '', 'error');
-      } else if (cmd.includes('pull origin')) {
-        callback(new Error('Already up to date'), '', 'notice');
+      if (cmd.includes('fetch origin') && cmd.includes('main')) {
+        callback(new Error('Remote branch not found'), '', 'error');
       } else if (cmd.includes('rev-parse HEAD')) {
         callback(null, `${validSha}\n`, '');
       } else {
@@ -128,7 +126,7 @@ describe('GitService', () => {
 
     expect(commitSha).toBe(validSha);
     expect(logs.some((l) => l.includes('Fetching and checking out origin/main'))).toBe(true);
-    expect(logs.some((l) => l.includes('Pull notice'))).toBe(true);
+    expect(logs.some((l) => l.includes('Remote checkout failed, attempting local checkout of main'))).toBe(true);
   });
 
   test('throws error when commit SHA is invalid or truncated', async () => {
