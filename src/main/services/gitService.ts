@@ -6,7 +6,12 @@ import { promisify } from 'node:util';
 import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
 import { isError, isErrorWithMessage } from '../../shared/typeGuards';
-import { getGitCacheDir, getWorkspacesDir, safeRemoveDirectorySync } from '../config';
+import {
+  getGitCacheDir,
+  getWorkspacesDir,
+  safeRemoveDirectorySync,
+  sanitizeBranchName,
+} from '../config';
 
 const execAsync = promisify(exec);
 
@@ -25,13 +30,10 @@ export class GitService {
     const cleanUrl = gitUrl.trim();
 
     try {
-      const { stdout } = await execAsync(
-        `git ls-remote --heads ${this.escapeShellArg(cleanUrl)}`,
-        {
-          timeout: 10000,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-        }
-      );
+      const { stdout } = await execAsync(`git ls-remote --heads ${this.escapeShellArg(cleanUrl)}`, {
+        timeout: 10000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      });
 
       const branches: string[] = [];
       const lines = stdout.split('\n');
@@ -175,28 +177,30 @@ export class GitService {
       );
     } else {
       log(`[GIT] Repository cache exists. Fetching updates from origin...`);
-      await this.runGitCommand(`fetch origin`, cacheDir, log);
+      try {
+        await this.runGitCommand(`fetch origin`, cacheDir, log);
+      } catch (err: unknown) {
+        log(`[GIT WARNING] Fetch origin notice: ${isError(err) ? err.message : String(err)}`, 'stderr');
+      }
     }
 
-    log(`[GIT] Checking out branch ${cleanBranch}...`);
+    log(`[GIT] Fetching and checking out origin/${cleanBranch}...`);
     try {
-      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
-    } catch {
-      log(`[GIT] Fetching and checking out origin/${cleanBranch}...`);
       await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanBranch)} origin/${this.escapeShellArg(cleanBranch)}`,
         cacheDir,
         log
       );
-    }
-
-    log(`[GIT] Syncing with origin/${cleanBranch}...`);
-    try {
-      await this.runGitCommand(`pull origin ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
-    } catch (err: unknown) {
-      const msg = isError(err) ? err.message : String(err);
-      log(`[GIT] Pull notice (using current head state): ${msg}`);
+      await this.runGitCommand(
+        `reset --hard origin/${this.escapeShellArg(cleanBranch)}`,
+        cacheDir,
+        log
+      );
+      await this.runGitCommand(`clean -fdx`, cacheDir, log);
+    } catch {
+      log(`[GIT] Remote checkout failed, attempting local checkout of ${cleanBranch}...`);
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBranch)}`, cacheDir, log);
     }
 
     log(`[GIT] Resolving commit SHA...`);
@@ -209,11 +213,12 @@ export class GitService {
 
     log(`[GIT] Resolved Commit SHA: ${commitSha}`);
 
-    // Create workspace directory identified by commit SHA
-    const workspaceDir = path.join(getWorkspacesDir(), commitSha);
-    if (!fs.existsSync(workspaceDir)) {
-      fs.mkdirSync(workspaceDir, { recursive: true });
+    // Create workspace directory identified by branch key
+    const workspaceDir = path.join(getWorkspacesDir(), sanitizeBranchName(cleanBranch));
+    if (fs.existsSync(workspaceDir)) {
+      safeRemoveDirectorySync(workspaceDir);
     }
+    fs.mkdirSync(workspaceDir, { recursive: true });
 
     log(`[GIT] Syncing repo code to workspace directory: ${workspaceDir}`);
     // Sync contents to workspace
@@ -273,28 +278,29 @@ export class GitService {
       );
     } else {
       log(`[GIT DIFF] Fetching updates from origin...`);
-      await this.runGitCommand(`fetch origin`, cacheDir, log);
+      try {
+        await this.runGitCommand(`fetch origin`, cacheDir, log);
+      } catch (err: unknown) {
+        log(`[GIT DIFF WARNING] Fetch origin notice: ${isError(err) ? err.message : String(err)}`, 'stderr');
+      }
     }
 
     // Checkout and resolve base branch SHA
     log(`[GIT DIFF] Resolving base branch (${cleanBase})...`);
     try {
       await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
-    } catch (fetchErr) {
-      log(
-        `[GIT DIFF NOTICE] Fetching base branch ${cleanBase} notice: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`
-      );
-    }
-
-    try {
-      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
-    } catch {
-      log(`[GIT DIFF] Local checkout failed, checking out origin/${cleanBase}...`);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanBase)} origin/${this.escapeShellArg(cleanBase)}`,
         cacheDir,
         log
       );
+      await this.runGitCommand(
+        `reset --hard origin/${this.escapeShellArg(cleanBase)}`,
+        cacheDir,
+        log
+      );
+    } catch {
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
     }
     const baseSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
     if (!/^[0-9a-fA-F]{40}$/.test(baseSha)) {
@@ -307,21 +313,18 @@ export class GitService {
     log(`[GIT DIFF] Resolving compare branch (${cleanCompare})...`);
     try {
       await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
-    } catch (fetchErr) {
-      log(
-        `[GIT DIFF NOTICE] Fetching compare branch ${cleanCompare} notice: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`
-      );
-    }
-
-    try {
-      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
-    } catch {
-      log(`[GIT DIFF] Local checkout failed, checking out origin/${cleanCompare}...`);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanCompare)} origin/${this.escapeShellArg(cleanCompare)}`,
         cacheDir,
         log
       );
+      await this.runGitCommand(
+        `reset --hard origin/${this.escapeShellArg(cleanCompare)}`,
+        cacheDir,
+        log
+      );
+    } catch {
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
     }
     const compareSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
     if (!/^[0-9a-fA-F]{40}$/.test(compareSha)) {
@@ -332,7 +335,7 @@ export class GitService {
 
     log(`[GIT DIFF] Base SHA: ${baseSha} | Compare SHA: ${compareSha}`);
 
-    const workspaceDir = path.join(getWorkspacesDir(), `diff-${compareSha}`);
+    const workspaceDir = path.join(getWorkspacesDir(), `diff-${sanitizeBranchName(cleanCompare)}`);
     const baseDir = path.join(workspaceDir, 'base');
     const compareDir = path.join(workspaceDir, 'compare');
 
@@ -358,11 +361,7 @@ export class GitService {
 
     log(`[GIT DIFF] Generating git diff patch...`);
     const diffPatchPath = path.join(workspaceDir, 'diff.patch');
-    const patchContent = await this.runGitCommand(
-      `diff ${baseSha} ${compareSha}`,
-      cacheDir,
-      log
-    );
+    const patchContent = await this.runGitCommand(`diff ${baseSha} ${compareSha}`, cacheDir, log);
     fs.writeFileSync(diffPatchPath, patchContent, 'utf-8');
 
     log(`[GIT DIFF] Diff patch saved to ${diffPatchPath} (${patchContent.length} bytes).`);

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { app } from 'electron';
 
 export function getUserDataDir(): string {
@@ -50,8 +51,29 @@ export function getStagingBaseDir(): string {
   return path.join(getBaseAppDir(), 'staged');
 }
 
-export function getStagedDir(commitSha: string): string {
-  return path.join(getStagingBaseDir(), commitSha);
+export function sanitizeBranchName(branch: string): string {
+  if (!branch || !branch.trim()) {
+    throw new Error('Branch name cannot be empty or blank');
+  }
+  let sanitized = branch.trim().replace(/[/\\:*?"<>|]/g, '_');
+  sanitized = sanitized.replace(/\s+/g, '_');
+  if (!sanitized || sanitized === '.' || sanitized === '..') {
+    throw new Error(`Invalid branch name resulting in unsafe directory: "${branch}"`);
+  }
+  return sanitized;
+}
+
+export function getStagedDir(gitUrl: string, branch: string): string {
+  const hash = crypto.createHash('md5').update(`${gitUrl.trim()}#${branch.trim()}`).digest('hex');
+  return path.join(getStagingBaseDir(), hash);
+}
+
+export function getStagedDiffDir(gitUrl: string, baseBranch: string, compareBranch: string): string {
+  const hash = crypto
+    .createHash('md5')
+    .update(`diff#${gitUrl.trim()}#${baseBranch.trim()}#${compareBranch.trim()}`)
+    .digest('hex');
+  return path.join(getStagingBaseDir(), hash);
 }
 
 /**
@@ -111,7 +133,9 @@ export function getPromptFilePath(): string {
 
   // 1. Electron process.resourcesPath (extraResources when packaged)
   if (process.resourcesPath) {
-    candidatePaths.push(path.join(process.resourcesPath, 'src', 'prompts', 'code-review-prompt.md'));
+    candidatePaths.push(
+      path.join(process.resourcesPath, 'src', 'prompts', 'code-review-prompt.md')
+    );
     candidatePaths.push(path.join(process.resourcesPath, 'code-review-prompt.md'));
   }
 
@@ -151,13 +175,17 @@ export function getDiffPromptFilePath(): string {
   const candidatePaths: string[] = [];
 
   if (process.resourcesPath) {
-    candidatePaths.push(path.join(process.resourcesPath, 'src', 'prompts', 'code-review-diff-prompt.md'));
+    candidatePaths.push(
+      path.join(process.resourcesPath, 'src', 'prompts', 'code-review-diff-prompt.md')
+    );
     candidatePaths.push(path.join(process.resourcesPath, 'code-review-diff-prompt.md'));
   }
 
   try {
     if (app && typeof app.getAppPath === 'function') {
-      candidatePaths.push(path.join(app.getAppPath(), 'src', 'prompts', 'code-review-diff-prompt.md'));
+      candidatePaths.push(
+        path.join(app.getAppPath(), 'src', 'prompts', 'code-review-diff-prompt.md')
+      );
       candidatePaths.push(path.join(app.getAppPath(), 'code-review-diff-prompt.md'));
     }
   } catch {

@@ -19,7 +19,7 @@ describe('ReviewPipelineRunner', () => {
     mockGitService = {
       prepareGitWorkspace: jest.fn().mockResolvedValue({
         commitSha: '84923bd151f6d5d77dd19392667a1c34f476ebaa',
-        workspaceDir: '/tmp/workspace/84923bd151f6d5d77dd19392667a1c34f476ebaa',
+        workspaceDir: '/tmp/workspace/main',
       }),
     };
     mockHistoryService = {
@@ -30,8 +30,8 @@ describe('ReviewPipelineRunner', () => {
     };
     mockStagingService = {
       prepareStagingWorkspace: jest.fn().mockReturnValue({
-        stagedDir: '/tmp/staged/84923bd151f6d5d77dd19392667a1c34f476ebaa',
-        contextJsonPath: '/tmp/staged/84923bd151f6d5d77dd19392667a1c34f476ebaa/context.json',
+        stagedDir: '/tmp/staged/main',
+        contextJsonPath: '/tmp/staged/main/context.json',
       }),
     };
     mockAgentInvoker = {
@@ -141,14 +141,13 @@ describe('ReviewPipelineRunner', () => {
         .mockResolvedValue({
           baseCommitSha: '1111111111111111111111111111111111111111',
           compareCommitSha: '2222222222222222222222222222222222222222',
-          workspaceDir: '/tmp/workspace/diff-2222222222222222222222222222222222222222',
+          workspaceDir: '/tmp/workspace/diff-feature_pr-1',
         });
       (mockStagingService as Record<string, unknown>).prepareDiffStagingWorkspace = jest
         .fn()
         .mockReturnValue({
-          stagedDir: '/tmp/staged/diff-2222222222222222222222222222222222222222',
-          contextJsonPath:
-            '/tmp/staged/diff-2222222222222222222222222222222222222222/context.json',
+          stagedDir: '/tmp/staged/diff-feature_pr-1',
+          contextJsonPath: '/tmp/staged/diff-feature_pr-1/context.json',
         });
     });
 
@@ -165,7 +164,12 @@ describe('ReviewPipelineRunner', () => {
       expect(r1.error).toBe('Git URL is required');
 
       const r2 = await runner.executeDiffPipeline(
-        { gitUrl: 'git@github.com:org/repo.git', baseBranch: '', compareBranch: 'feature', changeSpec: '' },
+        {
+          gitUrl: 'git@github.com:org/repo.git',
+          baseBranch: '',
+          compareBranch: 'feature',
+          changeSpec: '',
+        },
         onStateUpdate,
         onLogEntry
       );
@@ -173,7 +177,12 @@ describe('ReviewPipelineRunner', () => {
       expect(r2.error).toBe('Base branch name is required');
 
       const r3 = await runner.executeDiffPipeline(
-        { gitUrl: 'git@github.com:org/repo.git', baseBranch: 'main', compareBranch: '', changeSpec: '' },
+        {
+          gitUrl: 'git@github.com:org/repo.git',
+          baseBranch: 'main',
+          compareBranch: '',
+          changeSpec: '',
+        },
         onStateUpdate,
         onLogEntry
       );

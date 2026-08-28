@@ -29,6 +29,8 @@ export const App: React.FC = () => {
     error?: string;
   } | null>(null);
 
+  const activeGitUrl = mode === 'single' ? gitUrl : diffGitUrl;
+
   const {
     stage,
     commitSha,
@@ -43,7 +45,7 @@ export const App: React.FC = () => {
     setShowReportModal,
     isReviewRunning,
     resetForNewReview,
-  } = useReviewState(mode, setBranch, setCompareBranch);
+  } = useReviewState(mode, setBranch, setCompareBranch, activeGitUrl);
 
   // Load initial repo history
   useEffect(() => {
@@ -77,7 +79,9 @@ export const App: React.FC = () => {
     try {
       const [detectRes, branchesRes] = await Promise.all([
         window.api.detectBranch(url.trim()),
-        window.api.getBranches ? window.api.getBranches(url.trim()) : Promise.resolve({ success: false, branches: [] }),
+        window.api.getBranches
+          ? window.api.getBranches(url.trim())
+          : Promise.resolve({ success: false, branches: [] }),
       ]);
 
       setIsDetectingBranch(false);
@@ -113,7 +117,7 @@ export const App: React.FC = () => {
   const handleModeSwitch = (newMode: ReviewMode) => {
     if (isReviewRunning) return;
     setMode(newMode);
-    const targetUrl = newMode === 'diff' ? (diffGitUrl || gitUrl) : (gitUrl || diffGitUrl);
+    const targetUrl = newMode === 'diff' ? diffGitUrl || gitUrl : gitUrl || diffGitUrl;
     if (targetUrl) {
       handleUrlBlurOrSelect(targetUrl, newMode);
     }

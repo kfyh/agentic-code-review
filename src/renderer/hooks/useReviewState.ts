@@ -11,7 +11,8 @@ import {
 export function useReviewState(
   mode: ReviewMode,
   setBranch: React.Dispatch<React.SetStateAction<string>>,
-  setCompareBranch: React.Dispatch<React.SetStateAction<string>>
+  setCompareBranch: React.Dispatch<React.SetStateAction<string>>,
+  gitUrl?: string
 ) {
   const [stage, setStage] = useState<ReviewStage>('idle');
   const [commitSha, setCommitSha] = useState<string | undefined>(undefined);
@@ -34,14 +35,19 @@ export function useReviewState(
       if (update.commitSha) setCommitSha(update.commitSha);
       if (update.error) setError(update.error);
 
-      if (update.stage === 'completed' && update.commitSha) {
-        window.api
-          .getReports(update.commitSha)
-          .then((res) => {
-            setReports(res);
-            setShowReportModal(true);
-          })
-          .catch(console.error);
+      if (update.stage === 'completed') {
+        const queryKey = update.branch?.trim() || update.commitSha?.trim();
+        if (!queryKey) {
+          console.warn('[REPORTS] Review completed but neither branch nor commitSha was provided.');
+        } else {
+          window.api
+            .getReports(queryKey, gitUrl)
+            .then((res) => {
+              setReports(res);
+              setShowReportModal(true);
+            })
+            .catch(console.error);
+        }
         window.api.getHistory().then(setHistory).catch(console.error);
       }
     });
@@ -65,10 +71,7 @@ export function useReviewState(
   };
 
   const isReviewRunning =
-    stage === 'fetching' ||
-    stage === 'installing' ||
-    stage === 'staging' ||
-    stage === 'running';
+    stage === 'fetching' || stage === 'installing' || stage === 'staging' || stage === 'running';
 
   return {
     stage,

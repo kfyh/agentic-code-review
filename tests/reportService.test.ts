@@ -26,13 +26,18 @@ describe('ReportService', () => {
     }
   });
 
-  test('scans and loads reports from reports/, output/, and root fallback', async () => {
-    const stagedDir = path.join(customStagingBase, mockCommitSha);
+  test('scans and loads reports from reports/, output/, and root fallback using branch name', async () => {
+    const stagedDir = path.join(customStagingBase, 'hashed_dir_1');
     const reportsDir = path.join(stagedDir, 'reports');
     const outputDir = path.join(stagedDir, 'output');
 
     fs.mkdirSync(reportsDir, { recursive: true });
     fs.mkdirSync(outputDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(stagedDir, 'context.json'),
+      JSON.stringify({ repoUrl: 'git@github.com:org/repo.git', branch: 'feature/login' })
+    );
 
     fs.writeFileSync(
       path.join(reportsDir, 'pkg-a_code_smells.md'),
@@ -45,7 +50,8 @@ describe('ReportService', () => {
     fs.writeFileSync(path.join(stagedDir, 'root_code_smells.md'), '# Root Code Smell Analysis');
     fs.writeFileSync(path.join(stagedDir, 'README.md'), '# Ignored Readme');
 
-    const reports = await reportService.getReports(mockCommitSha);
+    // Query with branch name containing slash
+    const reports = await reportService.getReports('feature/login');
     expect(reports.length).toBe(3);
 
     const packageNames = reports.map((r) => r.packageName);
@@ -55,22 +61,44 @@ describe('ReportService', () => {
     expect(packageNames).not.toContain('README');
   });
 
-  test('loads review.md from diff-<commitSha> staging directory', async () => {
-    const diffStagedDir = path.join(customStagingBase, `diff-${mockCommitSha}`);
+  test('loads review.md from diff-<branchKey> staging directory', async () => {
+    const diffStagedDir = path.join(customStagingBase, 'hashed_dir_2');
     const reportsDir = path.join(diffStagedDir, 'reports');
     fs.mkdirSync(reportsDir, { recursive: true });
-    fs.writeFileSync(path.join(reportsDir, 'review.md'), '# PR Diff Review Report\n\nExecutive Summary');
+    fs.writeFileSync(
+      path.join(diffStagedDir, 'context.json'),
+      JSON.stringify({ repoUrl: 'git@github.com:org/repo.git', compareBranch: 'feature/pr-1' })
+    );
+    fs.writeFileSync(
+      path.join(reportsDir, 'review.md'),
+      '# PR Diff Review Report\n\nExecutive Summary'
+    );
 
-    // Query with plain commitSha
-    const reports = await reportService.getReports(mockCommitSha);
+    // Query with plain branch name
+    const reports = await reportService.getReports('feature/pr-1');
     expect(reports.length).toBe(1);
     expect(reports[0].packageName).toBe('review');
     expect(reports[0].content).toContain('# PR Diff Review Report');
+  });
 
-    // Query with diff- prefixed commitSha
-    const diffReports = await reportService.getReports(`diff-${mockCommitSha}`);
-    expect(diffReports.length).toBe(1);
-    expect(diffReports[0].packageName).toBe('review');
+  test('resolves reports by commitSha fallback via context.json matching', async () => {
+    const stagedDir = path.join(customStagingBase, 'feature_login');
+    const reportsDir = path.join(stagedDir, 'reports');
+    fs.mkdirSync(reportsDir, { recursive: true });
+    fs.writeFileSync(path.join(reportsDir, 'review.md'), '# SHA Fallback Review Report');
+    fs.writeFileSync(
+      path.join(stagedDir, 'context.json'),
+      JSON.stringify({
+        repoUrl: 'git@github.com:org/repo.git',
+        branch: 'feature/login',
+        commitSha: mockCommitSha,
+      })
+    );
+
+    // Query by commit SHA
+    const reports = await reportService.getReports(mockCommitSha);
+    expect(reports.length).toBe(1);
+    expect(reports[0].content).toContain('# SHA Fallback Review Report');
   });
 
   test('returns empty array if staged directory does not exist', async () => {
