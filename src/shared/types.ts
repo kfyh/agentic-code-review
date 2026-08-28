@@ -62,7 +62,7 @@ export interface HistoryApi {
 }
 
 export interface ReportsApi {
-  getReports: (branchOrKey: string) => Promise<ReviewReport[]>;
+  getReports: (branchOrKey: string, gitUrl?: string) => Promise<ReviewReport[]>;
 }
 
 export interface PipelineApi {

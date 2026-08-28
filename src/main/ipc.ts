@@ -53,8 +53,8 @@ export function setupIpcHandlers(
   });
 
   // Get generated review reports
-  ipcMain.handle(IPC_CHANNELS.GET_REPORTS, async (_, branchOrKey: string) => {
-    return await services.reportService.getReports(branchOrKey);
+  ipcMain.handle(IPC_CHANNELS.GET_REPORTS, async (_, branchOrKey: string, gitUrl?: string) => {
+    return await services.reportService.getReports(branchOrKey, gitUrl);
   });
 
   // Abort execution

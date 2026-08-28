@@ -1,6 +1,7 @@
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { app } from 'electron';
 
 export function getUserDataDir(): string {
@@ -51,12 +52,28 @@ export function getStagingBaseDir(): string {
 }
 
 export function sanitizeBranchName(branch: string): string {
-  if (!branch) return '';
-  return branch.trim().replace(/[/\\:?*"<>|\s]/g, '_');
+  if (!branch || !branch.trim()) {
+    throw new Error('Branch name cannot be empty or blank');
+  }
+  let sanitized = branch.trim().replace(/[/\\:*?"<>|]/g, '_');
+  sanitized = sanitized.replace(/\s+/g, '_');
+  if (!sanitized || sanitized === '.' || sanitized === '..') {
+    throw new Error(`Invalid branch name resulting in unsafe directory: "${branch}"`);
+  }
+  return sanitized;
 }
 
-export function getStagedDir(branchOrKey: string): string {
-  return path.join(getStagingBaseDir(), sanitizeBranchName(branchOrKey));
+export function getStagedDir(gitUrl: string, branch: string): string {
+  const hash = crypto.createHash('md5').update(`${gitUrl.trim()}#${branch.trim()}`).digest('hex');
+  return path.join(getStagingBaseDir(), hash);
+}
+
+export function getStagedDiffDir(gitUrl: string, baseBranch: string, compareBranch: string): string {
+  const hash = crypto
+    .createHash('md5')
+    .update(`diff#${gitUrl.trim()}#${baseBranch.trim()}#${compareBranch.trim()}`)
+    .digest('hex');
+  return path.join(getStagingBaseDir(), hash);
 }
 
 /**

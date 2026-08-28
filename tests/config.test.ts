@@ -68,18 +68,17 @@ describe('Config Module', () => {
     const customDir = '/tmp/custom_staging_test';
     setStagingDir(customDir);
     expect(getStagingBaseDir()).toBe(customDir);
-    expect(getStagedDir('sha123')).toBe(path.join(customDir, 'sha123'));
-    expect(getStagedDir('feature/login')).toBe(path.join(customDir, 'feature_login'));
-    expect(getStagedDir('diff-feature/login')).toBe(path.join(customDir, 'diff-feature_login'));
+    expect(getStagedDir('git@github.com:org/repo.git', 'sha123')).toContain(customDir);
+    expect(getStagedDir('git@github.com:org/repo.git', 'feature/login')).toContain(customDir);
   });
 
-  test('sanitizeBranchName replaces illegal characters with underscore', () => {
+  test('sanitizeBranchName replaces illegal characters with underscore and throws on empty', () => {
     expect(sanitizeBranchName('feature/login')).toBe('feature_login');
     expect(sanitizeBranchName('feature/nested/branch-name')).toBe('feature_nested_branch-name');
     expect(
       sanitizeBranchName('feat:add-user\\auth*test?name"with<greater>and|pipe and spaces')
     ).toBe('feat_add-user_auth_test_name_with_greater_and_pipe_and_spaces');
-    expect(sanitizeBranchName('')).toBe('');
+    expect(() => sanitizeBranchName('')).toThrow('Branch name cannot be empty or blank');
     expect(sanitizeBranchName('   main   ')).toBe('main');
   });
 

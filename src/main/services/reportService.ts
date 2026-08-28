@@ -25,7 +25,7 @@ export class ReportService {
    * `<stagedDir>/compare/reports/`, `<stagedDir>/base/reports/`, or root-level report files in `<stagedDir>/`.
    * Supports branch names/keys, standard commit SHAs, and `diff-<branchKey>` staging directories.
    */
-  public async getReports(branchOrKey: string): Promise<ReviewReport[]> {
+  public async getReports(branchOrKey: string, gitUrl?: string): Promise<ReviewReport[]> {
     if (!branchOrKey || !branchOrKey.trim()) {
       return [];
     }
@@ -33,28 +33,21 @@ export class ReportService {
     const cleanId = branchOrKey.trim();
     const candidateDirs: string[] = [];
 
-    // 1. Direct staging dir lookup using sanitized key
-    candidateDirs.push(getStagedDir(cleanId));
-
-    // 2. Check with/without diff- prefix
-    if (!cleanId.startsWith('diff-')) {
-      candidateDirs.push(getStagedDir(`diff-${cleanId}`));
-    } else {
-      candidateDirs.push(getStagedDir(cleanId.replace(/^diff-/, '')));
+    // Direct path support if absolute path or direct folder name in staging dir
+    if (path.isAbsolute(cleanId)) {
+      candidateDirs.push(cleanId);
     }
-
-    // 3. Direct path without sanitization (if distinct)
     const directPath = path.join(getStagingBaseDir(), cleanId);
-    if (!candidateDirs.includes(directPath)) {
+    if (fs.existsSync(directPath)) {
       candidateDirs.push(directPath);
     }
 
-    // 4. Absolute path support
-    if (path.isAbsolute(cleanId) && !candidateDirs.includes(cleanId)) {
-      candidateDirs.push(cleanId);
+    // Direct hashed dir lookups if gitUrl is provided
+    if (gitUrl && gitUrl.trim()) {
+      candidateDirs.push(getStagedDir(gitUrl, cleanId));
     }
 
-    // 5. Fallback: scan staging directories for matching context.json (e.g. if SHA was provided)
+    // Scan all staging directories for matching context.json (branch, commit SHA, or repoUrl + branch)
     const stagingBase = getStagingBaseDir();
     if (fs.existsSync(stagingBase)) {
       try {
@@ -67,13 +60,15 @@ export class ReportService {
               if (fs.existsSync(contextFile)) {
                 try {
                   const ctx = JSON.parse(fs.readFileSync(contextFile, 'utf-8'));
+                  const matchesGitUrl = !gitUrl || !gitUrl.trim() || ctx.repoUrl?.trim() === gitUrl.trim();
                   if (
-                    ctx.commitSha === cleanId ||
-                    ctx.compareCommitSha === cleanId ||
-                    ctx.baseCommitSha === cleanId ||
-                    ctx.branch === cleanId ||
-                    ctx.compareBranch === cleanId ||
-                    ctx.baseBranch === cleanId
+                    matchesGitUrl &&
+                    (ctx.commitSha === cleanId ||
+                      ctx.compareCommitSha === cleanId ||
+                      ctx.baseCommitSha === cleanId ||
+                      ctx.branch === cleanId ||
+                      ctx.compareBranch === cleanId ||
+                      ctx.baseBranch === cleanId)
                   ) {
                     candidateDirs.push(dirPath);
                   }

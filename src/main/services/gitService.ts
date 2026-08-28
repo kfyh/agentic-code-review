@@ -177,7 +177,11 @@ export class GitService {
       );
     } else {
       log(`[GIT] Repository cache exists. Fetching updates from origin...`);
-      await this.runGitCommand(`fetch origin`, cacheDir, log);
+      try {
+        await this.runGitCommand(`fetch origin`, cacheDir, log);
+      } catch (err: unknown) {
+        log(`[GIT WARNING] Fetch origin notice: ${isError(err) ? err.message : String(err)}`, 'stderr');
+      }
     }
 
     log(`[GIT] Checking out branch ${cleanBranch}...`);
@@ -276,28 +280,29 @@ export class GitService {
       );
     } else {
       log(`[GIT DIFF] Fetching updates from origin...`);
-      await this.runGitCommand(`fetch origin`, cacheDir, log);
+      try {
+        await this.runGitCommand(`fetch origin`, cacheDir, log);
+      } catch (err: unknown) {
+        log(`[GIT DIFF WARNING] Fetch origin notice: ${isError(err) ? err.message : String(err)}`, 'stderr');
+      }
     }
 
     // Checkout and resolve base branch SHA
     log(`[GIT DIFF] Resolving base branch (${cleanBase})...`);
     try {
       await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
-    } catch (fetchErr) {
-      log(
-        `[GIT DIFF NOTICE] Fetching base branch ${cleanBase} notice: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`
-      );
-    }
-
-    try {
-      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
-    } catch {
-      log(`[GIT DIFF] Local checkout failed, checking out origin/${cleanBase}...`);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanBase)} origin/${this.escapeShellArg(cleanBase)}`,
         cacheDir,
         log
       );
+      await this.runGitCommand(
+        `reset --hard origin/${this.escapeShellArg(cleanBase)}`,
+        cacheDir,
+        log
+      );
+    } catch {
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanBase)}`, cacheDir, log);
     }
     const baseSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
     if (!/^[0-9a-fA-F]{40}$/.test(baseSha)) {
@@ -310,21 +315,18 @@ export class GitService {
     log(`[GIT DIFF] Resolving compare branch (${cleanCompare})...`);
     try {
       await this.runGitCommand(`fetch origin ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
-    } catch (fetchErr) {
-      log(
-        `[GIT DIFF NOTICE] Fetching compare branch ${cleanCompare} notice: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`
-      );
-    }
-
-    try {
-      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
-    } catch {
-      log(`[GIT DIFF] Local checkout failed, checking out origin/${cleanCompare}...`);
       await this.runGitCommand(
         `checkout -B ${this.escapeShellArg(cleanCompare)} origin/${this.escapeShellArg(cleanCompare)}`,
         cacheDir,
         log
       );
+      await this.runGitCommand(
+        `reset --hard origin/${this.escapeShellArg(cleanCompare)}`,
+        cacheDir,
+        log
+      );
+    } catch {
+      await this.runGitCommand(`checkout ${this.escapeShellArg(cleanCompare)}`, cacheDir, log);
     }
     const compareSha = (await this.runGitCommand(`rev-parse HEAD`, cacheDir, log)).trim();
     if (!/^[0-9a-fA-F]{40}$/.test(compareSha)) {

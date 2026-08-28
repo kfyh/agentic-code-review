@@ -16,7 +16,8 @@ const api: WindowApi = {
     ipcRenderer.invoke(IPC_CHANNELS.START_DIFF_REVIEW, req),
   abortReview: () => ipcRenderer.invoke(IPC_CHANNELS.ABORT_REVIEW),
   getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),
-  getReports: (branchOrKey: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_REPORTS, branchOrKey),
+  getReports: (branchOrKey: string, gitUrl?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_REPORTS, branchOrKey, gitUrl),
   getStagingDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_STAGING_DIR),
   setStagingDir: (dir: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_STAGING_DIR, dir),
 

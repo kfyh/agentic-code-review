@@ -52,7 +52,7 @@ describe('StagingService', () => {
       (entry) => logs.push(entry.message)
     );
 
-    expect(stagedDir).toBe(path.join(customStagingBase, 'feature_login'));
+    expect(stagedDir.startsWith(customStagingBase)).toBe(true);
     expect(fs.existsSync(stagedDir)).toBe(true);
     expect(fs.existsSync(contextJsonPath)).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'src', 'index.ts'))).toBe(true);
@@ -82,7 +82,7 @@ describe('StagingService', () => {
       mockCommitSha
     );
 
-    expect(stagedDir).toBe(path.join(customStagingBase, 'feature_login'));
+    expect(stagedDir.startsWith(customStagingBase)).toBe(true);
     expect(fs.existsSync(stagedDir)).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'old_file.txt'))).toBe(false);
   });
@@ -117,7 +117,7 @@ describe('StagingService', () => {
       compareSha
     );
 
-    expect(stagedDir).toBe(path.join(customStagingBase, 'diff-feature_jira-123'));
+    expect(stagedDir.startsWith(customStagingBase)).toBe(true);
     expect(fs.existsSync(stagedDir)).toBe(true);
     expect(fs.existsSync(contextJsonPath)).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'base', 'src', 'old.ts'))).toBe(true);

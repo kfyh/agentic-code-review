@@ -4,6 +4,7 @@ import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
 import {
   getStagedDir,
+  getStagedDiffDir,
   getStagingBaseDir,
   safeRemoveDirectorySync,
   sanitizeBranchName,
@@ -32,7 +33,7 @@ export class StagingService {
       }
     };
 
-    const stagedDir = getStagedDir(branch);
+    const stagedDir = getStagedDir(gitUrl, branch);
     log(`[STAGING] Preparing staging directory at: ${stagedDir}`);
 
     if (fs.existsSync(stagedDir)) {
@@ -99,7 +100,7 @@ export class StagingService {
       }
     };
 
-    const stagedDir = getStagedDir(`diff-${sanitizeBranchName(compareBranch)}`);
+    const stagedDir = getStagedDiffDir(gitUrl, baseBranch, compareBranch);
     log(`[STAGING] Preparing diff staging directory at: ${stagedDir}`);
 
     if (fs.existsSync(stagedDir)) {

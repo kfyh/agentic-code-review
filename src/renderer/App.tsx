@@ -29,6 +29,8 @@ export const App: React.FC = () => {
     error?: string;
   } | null>(null);
 
+  const activeGitUrl = mode === 'single' ? gitUrl : diffGitUrl;
+
   const {
     stage,
     commitSha,
@@ -43,7 +45,7 @@ export const App: React.FC = () => {
     setShowReportModal,
     isReviewRunning,
     resetForNewReview,
-  } = useReviewState(mode, setBranch, setCompareBranch);
+  } = useReviewState(mode, setBranch, setCompareBranch, activeGitUrl);
 
   // Load initial repo history
   useEffect(() => {
