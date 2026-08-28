@@ -90,7 +90,11 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reports, isOpen, onC
                   onClick={handleCopy}
                   title="Copy Markdown to Clipboard"
                 >
-                  {copied ? <Check size={14} style={{ color: 'var(--status-success)' }} /> : <Copy size={14} />}
+                  {copied ? (
+                    <Check size={14} style={{ color: 'var(--status-success)' }} />
+                  ) : (
+                    <Copy size={14} />
+                  )}
                   <span>{copied ? 'Copied' : 'Copy'}</span>
                 </button>
                 <button

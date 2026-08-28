@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { injectable, inject } from 'tsyringe';
 import { ReviewReport } from '../../shared/types';
-import { getStagedDir } from '../config';
+import { getStagedDir, getStagingBaseDir } from '../config';
 import { StdoutReportParser } from './stdoutReportParser';
 
 const IGNORED_MARKDOWN_FILES = new Set([
@@ -23,17 +23,17 @@ export class ReportService {
   /**
    * Scans and loads generated markdown reports from `<stagedDir>/reports/`, `<stagedDir>/output/`,
    * `<stagedDir>/compare/reports/`, `<stagedDir>/base/reports/`, or root-level report files in `<stagedDir>/`.
-   * Supports standard commit SHA and `diff-<commitSha>` staging directories.
+   * Supports branch names/keys, standard commit SHAs, and `diff-<branchKey>` staging directories.
    */
-  public async getReports(commitSha: string): Promise<ReviewReport[]> {
-    if (!commitSha || !commitSha.trim()) {
+  public async getReports(branchOrKey: string): Promise<ReviewReport[]> {
+    if (!branchOrKey || !branchOrKey.trim()) {
       return [];
     }
 
-    const cleanId = commitSha.trim();
+    const cleanId = branchOrKey.trim();
     const candidateDirs: string[] = [];
 
-    // 1. Direct staging dir lookup
+    // 1. Direct staging dir lookup using sanitized key
     candidateDirs.push(getStagedDir(cleanId));
 
     // 2. Check with/without diff- prefix
@@ -43,9 +43,50 @@ export class ReportService {
       candidateDirs.push(getStagedDir(cleanId.replace(/^diff-/, '')));
     }
 
-    // 3. Absolute path support
-    if (path.isAbsolute(cleanId)) {
+    // 3. Direct path without sanitization (if distinct)
+    const directPath = path.join(getStagingBaseDir(), cleanId);
+    if (!candidateDirs.includes(directPath)) {
+      candidateDirs.push(directPath);
+    }
+
+    // 4. Absolute path support
+    if (path.isAbsolute(cleanId) && !candidateDirs.includes(cleanId)) {
       candidateDirs.push(cleanId);
+    }
+
+    // 5. Fallback: scan staging directories for matching context.json (e.g. if SHA was provided)
+    const stagingBase = getStagingBaseDir();
+    if (fs.existsSync(stagingBase)) {
+      try {
+        const entries = fs.readdirSync(stagingBase, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const dirPath = path.join(stagingBase, entry.name);
+            if (!candidateDirs.includes(dirPath)) {
+              const contextFile = path.join(dirPath, 'context.json');
+              if (fs.existsSync(contextFile)) {
+                try {
+                  const ctx = JSON.parse(fs.readFileSync(contextFile, 'utf-8'));
+                  if (
+                    ctx.commitSha === cleanId ||
+                    ctx.compareCommitSha === cleanId ||
+                    ctx.baseCommitSha === cleanId ||
+                    ctx.branch === cleanId ||
+                    ctx.compareBranch === cleanId ||
+                    ctx.baseBranch === cleanId
+                  ) {
+                    candidateDirs.push(dirPath);
+                  }
+                } catch {
+                  // ignore invalid json
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore directory read error
+      }
     }
 
     const reports: ReviewReport[] = [];
@@ -89,7 +130,7 @@ export class ReportService {
 
       return reports;
     } catch (err) {
-      console.error(`Failed to read reports for commitSha ${commitSha}:`, err);
+      console.error(`Failed to read reports for ${branchOrKey}:`, err);
       return [];
     }
   }

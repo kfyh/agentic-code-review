@@ -7,6 +7,7 @@ import {
   getStagingBaseDir,
   setStagingDir,
   getStagedDir,
+  sanitizeBranchName,
   getHistoryFilePath,
   getGitCacheDir,
   getWorkspacesDir,
@@ -68,6 +69,18 @@ describe('Config Module', () => {
     setStagingDir(customDir);
     expect(getStagingBaseDir()).toBe(customDir);
     expect(getStagedDir('sha123')).toBe(path.join(customDir, 'sha123'));
+    expect(getStagedDir('feature/login')).toBe(path.join(customDir, 'feature_login'));
+    expect(getStagedDir('diff-feature/login')).toBe(path.join(customDir, 'diff-feature_login'));
+  });
+
+  test('sanitizeBranchName replaces illegal characters with underscore', () => {
+    expect(sanitizeBranchName('feature/login')).toBe('feature_login');
+    expect(sanitizeBranchName('feature/nested/branch-name')).toBe('feature_nested_branch-name');
+    expect(
+      sanitizeBranchName('feat:add-user\\auth*test?name"with<greater>and|pipe and spaces')
+    ).toBe('feat_add-user_auth_test_name_with_greater_and_pipe_and_spaces');
+    expect(sanitizeBranchName('')).toBe('');
+    expect(sanitizeBranchName('   main   ')).toBe('main');
   });
 
   test('environment variable STAGING_DIR overrides default staging base dir', () => {

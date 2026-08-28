@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
-import { getStagedDir, getStagingBaseDir, safeRemoveDirectorySync } from '../config';
+import {
+  getStagedDir,
+  getStagingBaseDir,
+  safeRemoveDirectorySync,
+  sanitizeBranchName,
+} from '../config';
 
 @injectable()
 export class StagingService {
@@ -27,7 +32,7 @@ export class StagingService {
       }
     };
 
-    const stagedDir = getStagedDir(commitSha);
+    const stagedDir = getStagedDir(branch);
     log(`[STAGING] Preparing staging directory at: ${stagedDir}`);
 
     if (fs.existsSync(stagedDir)) {
@@ -94,7 +99,7 @@ export class StagingService {
       }
     };
 
-    const stagedDir = getStagedDir(`diff-${compareCommitSha}`);
+    const stagedDir = getStagedDir(`diff-${sanitizeBranchName(compareBranch)}`);
     log(`[STAGING] Preparing diff staging directory at: ${stagedDir}`);
 
     if (fs.existsSync(stagedDir)) {

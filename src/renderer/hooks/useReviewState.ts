@@ -34,9 +34,9 @@ export function useReviewState(
       if (update.commitSha) setCommitSha(update.commitSha);
       if (update.error) setError(update.error);
 
-      if (update.stage === 'completed' && update.commitSha) {
+      if (update.stage === 'completed' && (update.branch || update.commitSha)) {
         window.api
-          .getReports(update.commitSha)
+          .getReports(update.branch || update.commitSha || '')
           .then((res) => {
             setReports(res);
             setShowReportModal(true);
@@ -65,10 +65,7 @@ export function useReviewState(
   };
 
   const isReviewRunning =
-    stage === 'fetching' ||
-    stage === 'installing' ||
-    stage === 'staging' ||
-    stage === 'running';
+    stage === 'fetching' || stage === 'installing' || stage === 'staging' || stage === 'running';
 
   return {
     stage,

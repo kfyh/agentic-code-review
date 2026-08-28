@@ -119,8 +119,7 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
     return null;
   };
 
-  const isSubmitDisabled =
-    isReviewRunning || !gitUrl.trim() || !branch.trim() || isDetectingBranch;
+  const isSubmitDisabled = isReviewRunning || !gitUrl.trim() || !branch.trim() || isDetectingBranch;
 
   return (
     <div className="glass-panel">
@@ -236,11 +235,7 @@ export const RepoInputForm: React.FC<RepoInputFormProps> = ({
         </div>
 
         {/* Start Review Trigger */}
-        <button
-          type="submit"
-          className="btn-primary"
-          disabled={isSubmitDisabled}
-        >
+        <button type="submit" className="btn-primary" disabled={isSubmitDisabled}>
           <Play size={16} />
           <span>{isReviewRunning ? 'Review in Progress...' : 'Start Code Review'}</span>
         </button>

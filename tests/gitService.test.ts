@@ -94,12 +94,12 @@ describe('GitService', () => {
 
     const { commitSha, workspaceDir } = await gitService.prepareGitWorkspace(
       'git@github.com:org/repo.git',
-      'main',
+      'feature/login',
       (l) => logs.push(l.message)
     );
 
     expect(commitSha).toBe(validSha);
-    expect(workspaceDir).toBeTruthy();
+    expect(workspaceDir).toContain('feature_login');
     expect(logs.length).toBeGreaterThan(0);
   });
 
@@ -189,7 +189,7 @@ describe('GitService', () => {
 
     expect(res.baseCommitSha).toBe(baseSha);
     expect(res.compareCommitSha).toBe(compareSha);
-    expect(res.workspaceDir).toContain(`diff-${compareSha}`);
+    expect(res.workspaceDir).toContain('diff-feature_pr-1');
     expect(fs.existsSync(res.diffPatchPath)).toBe(true);
     expect(fs.readFileSync(res.diffPatchPath, 'utf-8')).toContain('diff --git');
     expect(logs.some((l) => l.includes('Base Branch: main | Compare Branch: feature/pr-1'))).toBe(

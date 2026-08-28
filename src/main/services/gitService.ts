@@ -6,7 +6,12 @@ import { promisify } from 'node:util';
 import { injectable } from 'tsyringe';
 import { LogEntry } from '../../shared/types';
 import { isError, isErrorWithMessage } from '../../shared/typeGuards';
-import { getGitCacheDir, getWorkspacesDir, safeRemoveDirectorySync } from '../config';
+import {
+  getGitCacheDir,
+  getWorkspacesDir,
+  safeRemoveDirectorySync,
+  sanitizeBranchName,
+} from '../config';
 
 const execAsync = promisify(exec);
 
@@ -25,13 +30,10 @@ export class GitService {
     const cleanUrl = gitUrl.trim();
 
     try {
-      const { stdout } = await execAsync(
-        `git ls-remote --heads ${this.escapeShellArg(cleanUrl)}`,
-        {
-          timeout: 10000,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-        }
-      );
+      const { stdout } = await execAsync(`git ls-remote --heads ${this.escapeShellArg(cleanUrl)}`, {
+        timeout: 10000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      });
 
       const branches: string[] = [];
       const lines = stdout.split('\n');
@@ -209,11 +211,12 @@ export class GitService {
 
     log(`[GIT] Resolved Commit SHA: ${commitSha}`);
 
-    // Create workspace directory identified by commit SHA
-    const workspaceDir = path.join(getWorkspacesDir(), commitSha);
-    if (!fs.existsSync(workspaceDir)) {
-      fs.mkdirSync(workspaceDir, { recursive: true });
+    // Create workspace directory identified by branch key
+    const workspaceDir = path.join(getWorkspacesDir(), sanitizeBranchName(cleanBranch));
+    if (fs.existsSync(workspaceDir)) {
+      safeRemoveDirectorySync(workspaceDir);
     }
+    fs.mkdirSync(workspaceDir, { recursive: true });
 
     log(`[GIT] Syncing repo code to workspace directory: ${workspaceDir}`);
     // Sync contents to workspace
@@ -332,7 +335,7 @@ export class GitService {
 
     log(`[GIT DIFF] Base SHA: ${baseSha} | Compare SHA: ${compareSha}`);
 
-    const workspaceDir = path.join(getWorkspacesDir(), `diff-${compareSha}`);
+    const workspaceDir = path.join(getWorkspacesDir(), `diff-${sanitizeBranchName(cleanCompare)}`);
     const baseDir = path.join(workspaceDir, 'base');
     const compareDir = path.join(workspaceDir, 'compare');
 
@@ -358,11 +361,7 @@ export class GitService {
 
     log(`[GIT DIFF] Generating git diff patch...`);
     const diffPatchPath = path.join(workspaceDir, 'diff.patch');
-    const patchContent = await this.runGitCommand(
-      `diff ${baseSha} ${compareSha}`,
-      cacheDir,
-      log
-    );
+    const patchContent = await this.runGitCommand(`diff ${baseSha} ${compareSha}`, cacheDir, log);
     fs.writeFileSync(diffPatchPath, patchContent, 'utf-8');
 
     log(`[GIT DIFF] Diff patch saved to ${diffPatchPath} (${patchContent.length} bytes).`);

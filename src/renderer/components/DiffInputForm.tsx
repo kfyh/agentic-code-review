@@ -1,6 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { HistoryEntry } from '../../shared/types';
-import { History, Play, GitBranch, RefreshCw, AlertCircle, Folder, FileText, GitCompare } from 'lucide-react';
+import {
+  History,
+  Play,
+  GitBranch,
+  RefreshCw,
+  AlertCircle,
+  Folder,
+  FileText,
+  GitCompare,
+} from 'lucide-react';
 import { BranchBadgeList } from './BranchBadgeList';
 import { HistoryDropdownMenu } from './HistoryDropdownMenu';
 
@@ -263,7 +272,9 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <FileText size={14} /> Change Specification (JIRA Description / PR Specs)
             </span>
-            <span className="field-hint">User requirement, JIRA ticket details, or acceptance criteria</span>
+            <span className="field-hint">
+              User requirement, JIRA ticket details, or acceptance criteria
+            </span>
           </label>
           <textarea
             className="textarea-input"
@@ -296,11 +307,7 @@ export const DiffInputForm: React.FC<DiffInputFormProps> = ({
         </div>
 
         {/* Start Diff Review Trigger */}
-        <button
-          type="submit"
-          className="btn-primary"
-          disabled={isSubmitDisabled}
-        >
+        <button type="submit" className="btn-primary" disabled={isSubmitDisabled}>
           <Play size={16} />
           <span>{isReviewRunning ? 'Diff Review in Progress...' : 'Start Diff Review'}</span>
         </button>

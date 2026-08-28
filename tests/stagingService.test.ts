@@ -47,11 +47,12 @@ describe('StagingService', () => {
     const { stagedDir, contextJsonPath } = stagingService.prepareStagingWorkspace(
       mockWorkspaceDir,
       'git@github.com:org/repo.git',
-      'main',
+      'feature/login',
       mockCommitSha,
       (entry) => logs.push(entry.message)
     );
 
+    expect(stagedDir).toBe(path.join(customStagingBase, 'feature_login'));
     expect(fs.existsSync(stagedDir)).toBe(true);
     expect(fs.existsSync(contextJsonPath)).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'src', 'index.ts'))).toBe(true);
@@ -64,23 +65,24 @@ describe('StagingService', () => {
     // Context metadata content check
     const contextData = JSON.parse(fs.readFileSync(contextJsonPath, 'utf-8'));
     expect(contextData.repoUrl).toBe('git@github.com:org/repo.git');
-    expect(contextData.branch).toBe('main');
+    expect(contextData.branch).toBe('feature/login');
     expect(contextData.commitSha).toBe(mockCommitSha);
     expect(contextData.stagedAt).toBeTruthy();
   });
 
   test('cleans pre-existing staging directory when re-preparing', () => {
-    const existingStaged = path.join(customStagingBase, mockCommitSha);
+    const existingStaged = path.join(customStagingBase, 'feature_login');
     fs.mkdirSync(existingStaged, { recursive: true });
     fs.writeFileSync(path.join(existingStaged, 'old_file.txt'), 'old data');
 
     const { stagedDir } = stagingService.prepareStagingWorkspace(
       mockWorkspaceDir,
       'git@github.com:org/repo.git',
-      'main',
+      'feature/login',
       mockCommitSha
     );
 
+    expect(stagedDir).toBe(path.join(customStagingBase, 'feature_login'));
     expect(fs.existsSync(stagedDir)).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'old_file.txt'))).toBe(false);
   });
@@ -96,7 +98,10 @@ describe('StagingService', () => {
     fs.mkdirSync(compareSrc, { recursive: true });
     fs.writeFileSync(path.join(baseSrc, 'old.ts'), 'export const v = 1;');
     fs.writeFileSync(path.join(compareSrc, 'new.ts'), 'export const v = 2;');
-    fs.writeFileSync(path.join(diffWorkspaceDir, 'diff.patch'), 'diff --git a/src/index.ts b/src/index.ts');
+    fs.writeFileSync(
+      path.join(diffWorkspaceDir, 'diff.patch'),
+      'diff --git a/src/index.ts b/src/index.ts'
+    );
 
     const baseSha = '1111111111111111111111111111111111111111';
     const compareSha = '2222222222222222222222222222222222222222';
@@ -112,7 +117,7 @@ describe('StagingService', () => {
       compareSha
     );
 
-    expect(stagedDir).toContain(`diff-${compareSha}`);
+    expect(stagedDir).toBe(path.join(customStagingBase, 'diff-feature_jira-123'));
     expect(fs.existsSync(stagedDir)).toBe(true);
     expect(fs.existsSync(contextJsonPath)).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'base', 'src', 'old.ts'))).toBe(true);

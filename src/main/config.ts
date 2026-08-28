@@ -50,8 +50,13 @@ export function getStagingBaseDir(): string {
   return path.join(getBaseAppDir(), 'staged');
 }
 
-export function getStagedDir(commitSha: string): string {
-  return path.join(getStagingBaseDir(), commitSha);
+export function sanitizeBranchName(branch: string): string {
+  if (!branch) return '';
+  return branch.trim().replace(/[/\\:?*"<>|\s]/g, '_');
+}
+
+export function getStagedDir(branchOrKey: string): string {
+  return path.join(getStagingBaseDir(), sanitizeBranchName(branchOrKey));
 }
 
 /**
@@ -111,7 +116,9 @@ export function getPromptFilePath(): string {
 
   // 1. Electron process.resourcesPath (extraResources when packaged)
   if (process.resourcesPath) {
-    candidatePaths.push(path.join(process.resourcesPath, 'src', 'prompts', 'code-review-prompt.md'));
+    candidatePaths.push(
+      path.join(process.resourcesPath, 'src', 'prompts', 'code-review-prompt.md')
+    );
     candidatePaths.push(path.join(process.resourcesPath, 'code-review-prompt.md'));
   }
 
@@ -151,13 +158,17 @@ export function getDiffPromptFilePath(): string {
   const candidatePaths: string[] = [];
 
   if (process.resourcesPath) {
-    candidatePaths.push(path.join(process.resourcesPath, 'src', 'prompts', 'code-review-diff-prompt.md'));
+    candidatePaths.push(
+      path.join(process.resourcesPath, 'src', 'prompts', 'code-review-diff-prompt.md')
+    );
     candidatePaths.push(path.join(process.resourcesPath, 'code-review-diff-prompt.md'));
   }
 
   try {
     if (app && typeof app.getAppPath === 'function') {
-      candidatePaths.push(path.join(app.getAppPath(), 'src', 'prompts', 'code-review-diff-prompt.md'));
+      candidatePaths.push(
+        path.join(app.getAppPath(), 'src', 'prompts', 'code-review-diff-prompt.md')
+      );
       candidatePaths.push(path.join(app.getAppPath(), 'code-review-diff-prompt.md'));
     }
   } catch {
