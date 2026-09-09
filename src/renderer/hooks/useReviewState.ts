@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   HistoryEntry,
   LogEntry,
@@ -22,6 +22,17 @@ export function useReviewState(
   const [reports, setReports] = useState<ReviewReport[]>([]);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
 
+  const gitUrlRef = useRef(gitUrl);
+  const modeRef = useRef(mode);
+
+  useEffect(() => {
+    gitUrlRef.current = gitUrl;
+  }, [gitUrl]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
   // Subscribe to IPC updates
   useEffect(() => {
     if (!window.api) return;
@@ -29,7 +40,7 @@ export function useReviewState(
     const unsubscribeState = window.api.onStateUpdate((update: ReviewStateUpdate) => {
       setStage(update.stage);
       if (update.branch) {
-        if (mode === 'single') setBranch(update.branch);
+        if (modeRef.current === 'single') setBranch(update.branch);
         else setCompareBranch(update.branch);
       }
       if (update.commitSha) setCommitSha(update.commitSha);
@@ -41,7 +52,7 @@ export function useReviewState(
           console.warn('[REPORTS] Review completed but neither branch nor commitSha was provided.');
         } else {
           window.api
-            .getReports(queryKey, gitUrl)
+            .getReports(queryKey, gitUrlRef.current)
             .then((res) => {
               setReports(res);
               setShowReportModal(true);
@@ -60,7 +71,7 @@ export function useReviewState(
       unsubscribeState();
       unsubscribeLog();
     };
-  }, [mode, setBranch, setCompareBranch]);
+  }, [setBranch, setCompareBranch]);
 
   const resetForNewReview = () => {
     setError(undefined);
