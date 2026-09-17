@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { injectable, inject } from 'tsyringe';
 import { ReviewReport } from '../../shared/types';
-import { getStagedDir, getStagingBaseDir } from '../config';
+import { getStagedDir, getStagedDiffDir, getStagingBaseDir } from '../config';
 import { StdoutReportParser } from './stdoutReportParser';
 
 const IGNORED_MARKDOWN_FILES = new Set([
@@ -44,7 +44,24 @@ export class ReportService {
 
     // Direct hashed dir lookups if gitUrl is provided
     if (gitUrl && gitUrl.trim()) {
-      candidateDirs.push(getStagedDir(gitUrl, cleanId));
+      const singleStaged = getStagedDir(gitUrl, cleanId);
+      candidateDirs.push(singleStaged);
+
+      // Support diff specs or keys formatted as base..compare, base...compare, base:compare, base#compare, or diff#...
+      if (cleanId.includes('..') || cleanId.includes(':') || cleanId.includes('#')) {
+        const cleanSpec = cleanId.replace(/^diff#/, '');
+        const parts = cleanSpec.split(/\.\.\.|\.\.|:|#/);
+        if (parts.length >= 2) {
+          const base = parts[parts.length - 2].trim();
+          const compare = parts[parts.length - 1].trim();
+          if (base && compare) {
+            const diffStaged = getStagedDiffDir(gitUrl, base, compare);
+            if (!candidateDirs.includes(diffStaged)) {
+              candidateDirs.push(diffStaged);
+            }
+          }
+        }
+      }
     }
 
     // Scan all staging directories for matching context.json (branch, commit SHA, or repoUrl + branch)
@@ -52,31 +69,58 @@ export class ReportService {
     if (fs.existsSync(stagingBase)) {
       try {
         const entries = fs.readdirSync(stagingBase, { withFileTypes: true });
+        const scannedDirs: { dirPath: string; mtimeMs: number }[] = [];
+
         for (const entry of entries) {
           if (entry.isDirectory()) {
             const dirPath = path.join(stagingBase, entry.name);
-            if (!candidateDirs.includes(dirPath)) {
-              const contextFile = path.join(dirPath, 'context.json');
-              if (fs.existsSync(contextFile)) {
-                try {
-                  const ctx = JSON.parse(fs.readFileSync(contextFile, 'utf-8'));
-                  const matchesGitUrl = !gitUrl || !gitUrl.trim() || ctx.repoUrl?.trim() === gitUrl.trim();
-                  if (
-                    matchesGitUrl &&
-                    (ctx.commitSha === cleanId ||
-                      ctx.compareCommitSha === cleanId ||
-                      ctx.baseCommitSha === cleanId ||
-                      ctx.branch === cleanId ||
-                      ctx.compareBranch === cleanId ||
-                      ctx.baseBranch === cleanId)
-                  ) {
-                    candidateDirs.push(dirPath);
+            const contextFile = path.join(dirPath, 'context.json');
+            if (fs.existsSync(contextFile)) {
+              try {
+                const ctx = JSON.parse(fs.readFileSync(contextFile, 'utf-8'));
+                const matchesGitUrl =
+                  !gitUrl ||
+                  !gitUrl.trim() ||
+                  this.normalizeGitUrl(ctx.repoUrl) === this.normalizeGitUrl(gitUrl);
+                if (
+                  matchesGitUrl &&
+                  (ctx.commitSha === cleanId ||
+                    ctx.compareCommitSha === cleanId ||
+                    ctx.baseCommitSha === cleanId ||
+                    ctx.branch === cleanId ||
+                    ctx.compareBranch === cleanId ||
+                    ctx.baseBranch === cleanId ||
+                    entry.name === cleanId ||
+                    (ctx.baseBranch && ctx.compareBranch && `${ctx.baseBranch}..${ctx.compareBranch}` === cleanId))
+                ) {
+                  let mtimeMs = 0;
+                  try {
+                    const stat = fs.statSync(dirPath);
+                    mtimeMs = stat.mtimeMs;
+                  } catch {
+                    // ignore stat error
                   }
-                } catch {
-                  // ignore invalid json
+                  if (ctx.stagedAt) {
+                    const parsedTime = Date.parse(ctx.stagedAt);
+                    if (!isNaN(parsedTime)) {
+                      mtimeMs = parsedTime;
+                    }
+                  }
+                  scannedDirs.push({ dirPath, mtimeMs });
                 }
+              } catch {
+                // ignore invalid json
               }
             }
+          }
+        }
+
+        // Sort scanned directories descending by mtime/stagedAt
+        scannedDirs.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+        for (const item of scannedDirs) {
+          if (!candidateDirs.includes(item.dirPath)) {
+            candidateDirs.push(item.dirPath);
           }
         }
       } catch {
@@ -250,5 +294,17 @@ export class ReportService {
     } catch {
       // Ignore directory read errors
     }
+  }
+
+  private normalizeGitUrl(url?: string): string {
+    if (!url) return '';
+    let normalized = url.trim().toLowerCase();
+    if (normalized.endsWith('.git')) {
+      normalized = normalized.slice(0, -4);
+    }
+    if (normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1);
+    }
+    return normalized;
   }
 }

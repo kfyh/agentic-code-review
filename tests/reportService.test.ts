@@ -182,4 +182,57 @@ describe('ReportService', () => {
     const extracted = reportService.extractReportFromStdout(['line 1', 'line 2'], stagedDir);
     expect(extracted).toBe(false);
   });
+
+  test('locates report stored under diff-review hash when Single Repo Review queries by branch name and gitUrl', async () => {
+    // Simulate diff review hash folder: diff#https://github.com/myorg/myrepo#main#feature-x
+    const crypto = await import('node:crypto');
+    const repoUrl = 'https://github.com/myorg/myrepo.git';
+    const diffHash = crypto.createHash('md5').update(`diff#${repoUrl.trim()}#main#feature-x`).digest('hex');
+    const diffStagedDir = path.join(customStagingBase, diffHash);
+    const reportsDir = path.join(diffStagedDir, 'reports');
+    fs.mkdirSync(reportsDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(diffStagedDir, 'context.json'),
+      JSON.stringify({
+        repoUrl: repoUrl,
+        baseBranch: 'main',
+        compareBranch: 'feature-x',
+        stagedAt: new Date().toISOString(),
+      })
+    );
+    fs.writeFileSync(
+      path.join(reportsDir, 'review.md'),
+      '# Diff Review Output for feature-x'
+    );
+
+    // Query in Single Repo Review with branch "feature-x" and repo URL (without .git suffix)
+    const reports = await reportService.getReports('feature-x', 'https://github.com/myorg/myrepo');
+    expect(reports.length).toBe(1);
+    expect(reports[0].content).toContain('# Diff Review Output for feature-x');
+  });
+
+  test('locates report stored under diff-review hash when querying by diff spec or diff hash', async () => {
+    const crypto = await import('node:crypto');
+    const repoUrl = 'https://github.com/myorg/spec-repo';
+    const diffHash = crypto.createHash('md5').update(`diff#${repoUrl.trim()}#main#dev`).digest('hex');
+    const diffStagedDir = path.join(customStagingBase, diffHash);
+    const reportsDir = path.join(diffStagedDir, 'reports');
+    fs.mkdirSync(reportsDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(diffStagedDir, 'context.json'),
+      JSON.stringify({
+        repoUrl,
+        baseBranch: 'main',
+        compareBranch: 'dev',
+      })
+    );
+    fs.writeFileSync(path.join(reportsDir, 'review.md'), '# Spec Review');
+
+    // Query using main..dev spec
+    const reports = await reportService.getReports('main..dev', repoUrl);
+    expect(reports.length).toBe(1);
+    expect(reports[0].content).toContain('# Spec Review');
+  });
 });
